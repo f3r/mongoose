@@ -1,34 +1,47 @@
+'use strict';
 
 /**
  * Test dependencies.
  */
 
-var start = require('./common')
-  , assert = require('assert')
-  , mongoose = start.mongoose
-  , random = require('../lib/utils').random
-  , Schema = mongoose.Schema
-  , ObjectId = Schema.Types.ObjectId;
+const start = require('./common');
+
+const assert = require('assert');
+const co = require('co');
+const random = require('../lib/utils').random;
+
+const mongoose = start.mongoose;
+const Schema = mongoose.Schema;
+const ObjectId = Schema.Types.ObjectId;
 
 describe('model', function() {
+  let db;
+
+  before(function() {
+    db = start();
+  });
+
+  after(function(done) {
+    db.close(done);
+  });
+
   describe('indexes', function() {
     it('are created when model is compiled', function(done) {
-      var Indexed = new Schema({
-        name  : { type: String, index: true }
-        , last  : String
-        , email : String
-        , date  : Date
+      const Indexed = new Schema({
+        name: { type: String, index: true },
+        last: String,
+        email: String,
+        date: Date
       });
 
       Indexed.index({ last: 1, email: 1 }, { unique: true });
       Indexed.index({ date: 1 }, { expires: 10 });
 
-      var db = start()
-        , IndexedModel = db.model('IndexedModel', Indexed, 'indexedmodel' + random())
-        , assertions = 0;
+      const IndexedModel = db.model('IndexedModel1', Indexed, 'indexedmodel' + random());
+      let assertions = 0;
 
       IndexedModel.on('index', function() {
-        IndexedModel.collection.getIndexes({full:true}, function(err, indexes) {
+        IndexedModel.collection.getIndexes({ full: true }, function(err, indexes) {
           assert.ifError(err);
 
           indexes.forEach(function(index) {
@@ -45,118 +58,160 @@ describe('model', function() {
             }
           });
 
-          assert.equal(4, assertions);
-          db.close(done);
+          assert.equal(assertions, 4);
+          done();
         });
       });
     });
 
     it('of embedded documents', function(done) {
-      var BlogPosts = new Schema({
-        _id     : { type: ObjectId, index: true }
-        , title   : { type: String, index: true }
-        , desc    : String
-      });
-
-      var User = new Schema({
-        name        : { type: String, index: true }
-        , blogposts   : [BlogPosts]
-      });
-
-      var db = start()
-        , UserModel = db.model('DeepIndexedModel', User, 'deepindexedmodel' + random())
-        , assertions = 0;
-
-      UserModel.on('index', function() {
-        UserModel.collection.getIndexes(function(err, indexes) {
-          assert.ifError(err);
-
-          for (var i in indexes) {
-            indexes[i].forEach(function(index) {
-              if (index[0] == 'name')
-                assertions++;
-              if (index[0] == 'blogposts._id')
-                assertions++;
-              if (index[0] == 'blogposts.title')
-                assertions++;
-            });
-          }
-
-          assert.equal(3, assertions);
-          db.close(done);
-        });
-      });
-    });
-
-    it('of multiple embedded documents with same schema', function(done) {
-      var BlogPosts = new Schema({
+      const BlogPosts = new Schema({
         _id: { type: ObjectId, index: true },
         title: { type: String, index: true },
         desc: String
       });
 
-      var User = new Schema({
+      const User = new Schema({
+        name: { type: String, index: true },
+        blogposts: [BlogPosts]
+      });
+
+      const UserModel = db.model('DeepIndexedModel2', User, 'deepindexedmodel' + random());
+      let assertions = 0;
+
+      UserModel.on('index', function() {
+        UserModel.collection.getIndexes(function(err, indexes) {
+          assert.ifError(err);
+
+          function iter(index) {
+            if (index[0] === 'name') {
+              assertions++;
+            }
+            if (index[0] === 'blogposts._id') {
+              assertions++;
+            }
+            if (index[0] === 'blogposts.title') {
+              assertions++;
+            }
+          }
+
+          for (const i in indexes) {
+            indexes[i].forEach(iter);
+          }
+
+          assert.equal(assertions, 3);
+          done();
+        });
+      });
+    });
+
+    it('of embedded documents unless excludeIndexes (gh-5575) (gh-8343)', function(done) {
+      const BlogPost = Schema({
+        _id: { type: ObjectId },
+        title: { type: String, index: true },
+        desc: String
+      });
+      const otherSchema = Schema({
+        name: { type: String, index: true }
+      }, { excludeIndexes: true });
+
+      const User = new Schema({
+        name: { type: String, index: true },
+        blogposts: {
+          type: [BlogPost],
+          excludeIndexes: true
+        },
+        otherblogposts: [{ type: BlogPost, excludeIndexes: true }],
+        blogpost: {
+          type: BlogPost,
+          excludeIndexes: true
+        },
+        otherArr: [otherSchema]
+      });
+
+      const UserModel = db.model('gh5575', User);
+
+      UserModel.on('index', function() {
+        UserModel.collection.getIndexes(function(err, indexes) {
+          assert.ifError(err);
+
+          // Should only have _id and name indexes
+          const indexNames = Object.keys(indexes);
+          assert.deepEqual(indexNames.sort(), ['_id_', 'name_1']);
+          done();
+        });
+      });
+    });
+
+    it('of multiple embedded documents with same schema', function(done) {
+      const BlogPosts = new Schema({
+        _id: { type: ObjectId, unique: true },
+        title: { type: String, index: true },
+        desc: String
+      });
+
+      const User = new Schema({
         name: { type: String, index: true },
         blogposts: [BlogPosts],
         featured: [BlogPosts]
       });
 
-      var db = start();
-      var UserModel = db.model('DeepIndexedModel', User, 'gh-2322');
-      var assertions = 0;
+      const UserModel = db.model('DeepIndexedModelMulti3', User, 'gh2322');
+      let assertions = 0;
 
       UserModel.on('index', function() {
         UserModel.collection.getIndexes(function(err, indexes) {
           assert.ifError(err);
 
-          for (var i in indexes) {
-            indexes[i].forEach(function(index) {
-              if (index[0] === 'name') {
-                ++assertions;
-              }
-              if (index[0] === 'blogposts._id') {
-                ++assertions;
-              }
-              if (index[0] === 'blogposts.title') {
-                ++assertions;
-              }
-              if (index[0] === 'featured._id') {
-                ++assertions;
-              }
-              if (index[0] === 'featured.title') {
-                ++assertions;
-              }
-            });
+          function iter(index) {
+            if (index[0] === 'name') {
+              ++assertions;
+            }
+            if (index[0] === 'blogposts._id') {
+              ++assertions;
+            }
+            if (index[0] === 'blogposts.title') {
+              ++assertions;
+            }
+            if (index[0] === 'featured._id') {
+              ++assertions;
+            }
+            if (index[0] === 'featured.title') {
+              ++assertions;
+            }
           }
 
-          assert.equal(5, assertions);
-          db.close(done);
+          for (const i in indexes) {
+            indexes[i].forEach(iter);
+          }
+
+          assert.equal(assertions, 5);
+          done();
         });
       });
     });
 
     it('compound: on embedded docs', function(done) {
-      var BlogPosts = new Schema({
-        title   : String
-        , desc    : String
+      const BlogPosts = new Schema({
+        title: String,
+        desc: String
       });
 
       BlogPosts.index({ title: 1, desc: 1 });
 
-      var User = new Schema({
-        name        : { type: String, index: true }
-        , blogposts   : [BlogPosts]
+      const User = new Schema({
+        name: { type: String, index: true },
+        blogposts: [BlogPosts]
       });
 
-      var db = start()
-        , UserModel = db.model('DeepCompoundIndexModel', User, 'deepcompoundindexmodel' + random())
-        , found = 0;
+      const UserModel = db.model('DeepCompoundIndexModel4', User, 'deepcompoundindexmodel' + random());
+      let found = 0;
 
       UserModel.on('index', function() {
         UserModel.collection.getIndexes(function(err, indexes) {
           assert.ifError(err);
 
-          for (var index in indexes) {
+          for (const index in indexes) {
             switch (index) {
               case 'name_1':
               case 'blogposts.title_1_blogposts.desc_1':
@@ -165,40 +220,124 @@ describe('model', function() {
             }
           }
 
-          db.close();
-          assert.equal(2, found);
+          assert.equal(found, 2);
           done();
         });
       });
     });
 
-    it('error should emit on the model', function(done) {
-      var db = start();
-
-      var schema = new Schema({ name: { type: String } })
-        , Test = db.model('IndexError', schema, "x" + random());
-
-      Test.on('index', function(err) {
-        db.close();
-        assert.ok(/E11000 duplicate key error/.test(err.message), err);
-        done();
+    it('nested embedded docs (gh-5199)', function(done) {
+      const SubSubSchema = mongoose.Schema({
+        nested2: String
       });
+
+      SubSubSchema.index({ nested2: 1 });
+
+      const SubSchema = mongoose.Schema({
+        nested1: String,
+        subSub: SubSubSchema
+      });
+
+      SubSchema.index({ nested1: 1 });
+
+      const ContainerSchema = mongoose.Schema({
+        nested0: String,
+        sub: SubSchema
+      });
+
+      ContainerSchema.index({ nested0: 1 });
+
+      assert.deepEqual(ContainerSchema.indexes().map(function(v) { return v[0]; }), [
+        { 'sub.subSub.nested2': 1 },
+        { 'sub.nested1': 1 },
+        { nested0: 1 }
+      ]);
+
+      done();
+    });
+
+    it('primitive arrays (gh-3347)', function(done) {
+      const schema = new Schema({
+        arr: [{ type: String, unique: true }]
+      });
+
+      const indexes = schema.indexes();
+      assert.equal(indexes.length, 1);
+      assert.deepEqual(indexes[0][0], { arr: 1 });
+      assert.ok(indexes[0][1].unique);
+
+      done();
+    });
+
+    it('error should emit on the model', function(done) {
+      const schema = new Schema({ name: { type: String } });
+      const Test = db.model('IndexError5', schema, 'x' + random());
 
       Test.create({ name: 'hi' }, { name: 'hi' }, function(err) {
         assert.strictEqual(err, null);
         Test.schema.index({ name: 1 }, { unique: true });
         Test.schema.index({ other: 1 });
-        Test.init();
+
+        Test.on('index', function(err) {
+          assert.ok(/E11000 duplicate key error/.test(err.message), err);
+          done();
+        });
+
+        delete Test.$init;
+        Test.init().catch(() => {});
+      });
+    });
+
+    it('when one index creation errors', function(done) {
+      const userSchema = {
+        name: { type: String },
+        secondValue: { type: Boolean }
+      };
+
+      const User = new Schema(userSchema);
+      User.index({ name: 1 });
+
+      const User2 = new Schema(userSchema);
+      User2.index({ name: 1 }, { unique: true });
+      User2.index({ secondValue: 1 });
+
+      const collectionName = 'deepindexedmodel' + random();
+      // Create model with first schema to initialize indexes
+      db.model('SingleIndexedModel', User, collectionName);
+
+      // Create model with second schema in same collection to add new indexes
+      const UserModel2 = db.model('DuplicateIndexedModel', User2, collectionName);
+      let assertions = 0;
+
+      UserModel2.on('index', function() {
+        UserModel2.collection.getIndexes(function(err, indexes) {
+          assert.ifError(err);
+
+          function iter(index) {
+            if (index[0] === 'name') {
+              assertions++;
+            }
+            if (index[0] === 'secondValue') {
+              assertions++;
+            }
+          }
+
+          for (const i in indexes) {
+            indexes[i].forEach(iter);
+          }
+
+          assert.equal(assertions, 2);
+          done();
+        });
       });
     });
 
     describe('auto creation', function() {
       it('can be disabled', function(done) {
-        var db = start();
-        var schema = new Schema({ name: { type: String, index: true }});
+        const schema = new Schema({ name: { type: String, index: true } });
         schema.set('autoIndex', false);
 
-        var Test = db.model('AutoIndexing', schema, 'autoindexing-disable');
+        const Test = db.model('AutoIndexing6', schema, 'autoindexing-disable');
         Test.on('index', function() {
           assert.ok(false, 'Model.ensureIndexes() was called');
         });
@@ -212,7 +351,7 @@ describe('model', function() {
               assert.ifError(err);
               // Only default _id index should exist
               assert.deepEqual(['_id_'], Object.keys(indexes));
-              db.close(done);
+              done();
             });
           }, 100);
         });
@@ -220,24 +359,23 @@ describe('model', function() {
 
       describe('global autoIndexes (gh-1875)', function() {
         it('will create indexes as a default', function(done) {
-          var db = start();
-          var schema = new Schema({name : { type: String, index: true } });
-          var Test = db.model('GlobalAutoIndex', schema, 'gh-1875-1');
+          const schema = new Schema({ name: { type: String, index: true } });
+          const Test = db.model('GlobalAutoIndex7', schema, 'gh-1875-1');
           Test.on('index', function(error) {
             assert.ifError(error);
             assert.ok(true, 'Model.ensureIndexes() was called');
             Test.collection.getIndexes(function(err, indexes) {
               assert.ifError(err);
-              assert.equal(2, Object.keys(indexes).length);
-              db.close(done);
+              assert.equal(Object.keys(indexes).length, 2);
+              done();
             });
           });
         });
 
         it('will not create indexes if the global auto index is false and schema option isnt set (gh-1875)', function(done) {
-          var db = start({config: {autoIndex : false}});
-          var schema = new Schema({name : {type: String, index: true}});
-          var Test = db.model('GlobalAutoIndex', schema, "x" + random());
+          const db = start({ config: { autoIndex: false } });
+          const schema = new Schema({ name: { type: String, index: true } });
+          const Test = db.model('GlobalAutoIndex8', schema, 'x' + random());
           Test.on('index', function() {
             assert.ok(false, 'Model.ensureIndexes() was called');
           });
@@ -256,74 +394,29 @@ describe('model', function() {
       });
     });
 
-    it('do not trigger "MongoError: cannot add index with a background operation in progress" (gh-1365) LONG', function(done) {
-      this.timeout(45000);
-
-      var db = start({ uri: 'mongodb://localhost/mongoose_test_indexing'});
-
-      var schema = Schema({
-        name: { type:String, index: true }
-        , furryness: { type:Number, index: true }
-      }, { autoIndex: false });
-
-      schema.index({ name:1, furryness:1});
-
-      var K = db.model('Kitten', schema);
-      K.on('index', function(err) {
-        assert.ifError(err);
-        db.close(done);
-      });
-
-      var neededKittens = 30000;
-
-      db.on('open', function() {
-        K.count({}, function(err, n) {
-          assert.ifError(err);
-          if (n >= neededKittens) return index();
-          var pending = neededKittens - n;
-          for (var i = n; i < neededKittens; ++i) (function(i) {
-            K.create({ name: 'kitten' + i, furryness: i }, function(err) {
-              assert.ifError(err);
-              if (--pending) return;
-              index();
-            });
-          })(i);
-        });
-
-        function index() {
-          K.collection.dropAllIndexes(function(err) {
-            assert.ifError(err);
-            K.ensureIndexes();
-          });
-        }
-      });
-    });
-
-
-    describe('model.ensureIndexes()', function() {
+    describe.skip('model.ensureIndexes()', function() {
       it('is a function', function(done) {
-        var schema = mongoose.Schema({ x: 'string' });
-        var Test = mongoose.createConnection().model('ensureIndexes-' + random, schema);
-        assert.equal('function', typeof Test.ensureIndexes);
+        const schema = mongoose.Schema({ x: 'string' });
+        const Test = mongoose.createConnection().model('ensureIndexes-' + random, schema);
+        assert.equal(typeof Test.ensureIndexes, 'function');
         done();
       });
 
       it('returns a Promise', function(done) {
-        var schema = mongoose.Schema({ x: 'string' });
-        var Test = mongoose.createConnection().model('ensureIndexes-' + random, schema);
-        var p = Test.ensureIndexes();
+        const schema = mongoose.Schema({ x: 'string' });
+        const Test = mongoose.createConnection().model('ensureIndexes-' + random, schema);
+        const p = Test.ensureIndexes();
         assert.ok(p instanceof mongoose.Promise);
         done();
       });
 
       it('creates indexes', function(done) {
-        var db = start();
-        var schema = new Schema({ name: { type: String } })
-          , Test = db.model('ManualIndexing', schema, "x" + random());
+        const schema = new Schema({ name: { type: String } });
+        const Test = db.model('ManualIndexing' + random(), schema, 'x' + random());
 
         Test.schema.index({ name: 1 }, { sparse: true });
 
-        var called = false;
+        let called = false;
         Test.on('index', function() {
           called = true;
         });
@@ -331,8 +424,122 @@ describe('model', function() {
         Test.ensureIndexes(function(err) {
           assert.ifError(err);
           assert.ok(called);
-          db.close(done);
+          done();
         });
+      });
+    });
+  });
+
+  describe('discriminators with unique', function() {
+    it('converts to partial unique index (gh-6347)', function() {
+      const baseOptions = { discriminatorKey: 'kind' };
+      const baseSchema = new Schema({}, baseOptions);
+
+      const Base = db.model('gh6347_Base', baseSchema);
+
+      const userSchema = new Schema({
+        emailId: { type: String, unique: true }, // Should become a partial
+        firstName: { type: String }
+      });
+
+      const User = Base.discriminator('gh6347_User', userSchema);
+
+      const deviceSchema = new Schema({
+        _id: { type: Schema.ObjectId, auto: true },
+        name: { type: String, unique: true }, // Should become a partial
+        model: { type: String }
+      });
+
+      const Device = Base.discriminator('gh6347_Device', deviceSchema);
+
+      return Promise.all([
+        Base.init(),
+        User.init(),
+        Device.init(),
+        Base.create({}),
+        User.create({ emailId: 'val@karpov.io', firstName: 'Val' }),
+        Device.create({ name: 'Samsung', model: 'Galaxy' })
+      ]);
+    });
+
+    it('decorated discriminator index with syncIndexes (gh-6347)', function() {
+      const baseOptions = { discriminatorKey: 'kind' };
+      const baseSchema = new Schema({}, baseOptions);
+
+      const Base = db.model('gh6347_Base_0', baseSchema);
+
+      const userSchema = new Schema({
+        emailId: { type: String, unique: true }, // Should become a partial
+        firstName: { type: String }
+      });
+
+      const User = Base.discriminator('gh6347_User_0', userSchema);
+
+      return User.init().
+        then(() => User.syncIndexes()).
+        then(dropped => assert.equal(dropped.length, 0));
+    });
+
+    it('different collation with syncIndexes() (gh-8521)', function() {
+      return co(function*() {
+        yield db.db.collection('users').drop().catch(() => {});
+
+        let userSchema = new mongoose.Schema({ username: String });
+        userSchema.index({ username: 1 }, { unique: true });
+        let User = db.model('User', userSchema);
+
+        yield User.init();
+        let indexes = yield User.listIndexes();
+        assert.equal(indexes.length, 2);
+        assert.deepEqual(indexes[1].key, { username: 1 });
+        assert.ok(!indexes[1].collation);
+
+        userSchema = new mongoose.Schema({ username: String });
+        userSchema.index({ username: 1 }, {
+          unique: true,
+          collation: {
+            locale: 'en',
+            strength: 2
+          }
+        });
+        db.deleteModel('User');
+        User = db.model('User', userSchema);
+
+        yield User.init();
+        yield User.syncIndexes();
+
+        indexes = yield User.listIndexes();
+        assert.equal(indexes.length, 2);
+        assert.deepEqual(indexes[1].key, { username: 1 });
+        assert.ok(!!indexes[1].collation);
+
+        yield User.collection.drop();
+      });
+    });
+
+    it('cleanIndexes (gh-6676)', function() {
+      return co(function*() {
+        let M = db.model('gh6676', new Schema({
+          name: { type: String, index: true }
+        }, { autoIndex: false }), 'gh6676');
+
+        yield M.createIndexes();
+
+        let indexes = yield M.listIndexes();
+        assert.deepEqual(indexes.map(i => i.key), [
+          { _id: 1 },
+          { name: 1 }
+        ]);
+
+        M = db.model('gh6676_2', new Schema({
+          name: String
+        }, { autoIndex: false }), 'gh6676');
+
+        yield M.cleanIndexes();
+        indexes = yield M.listIndexes();
+        assert.deepEqual(indexes.map(i => i.key), [
+          { _id: 1 }
+        ]);
       });
     });
   });

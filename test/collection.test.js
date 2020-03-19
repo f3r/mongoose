@@ -1,41 +1,67 @@
+'use strict';
 
-var start = require('./common')
-  , mongoose = start.mongoose
-  , assert = require('assert')
-  , Collection = require('../lib/collection');
+const start = require('./common');
+
+const Collection = require('../lib/collection');
+const assert = require('assert');
+
+const mongoose = start.mongoose;
 
 describe('collections:', function() {
   it('should buffer commands until connection is established', function(done) {
-    var db = mongoose.createConnection()
-      , collection = db.collection('test-buffering-collection')
-      , connected = false
-      , inserted = false
-      , pending = 2;
+    const db = mongoose.createConnection();
+    const collection = db.collection('test-buffering-collection');
+    let connected = false;
+    let insertedId = undefined;
+    let pending = 2;
 
     function finish() {
-      if (--pending) return;
+      if (--pending) {
+        return;
+      }
       assert.ok(connected);
-      assert.ok(inserted);
-      done();
+      assert.ok(insertedId !== undefined);
+      collection.findOne({ _id: insertedId }).then(doc => {
+        assert.strictEqual(doc.foo, 'bar');
+        db.close();
+        done();
+      });
     }
 
-    collection.insert({ }, { safe: true }, function() {
+    collection.insertOne({ foo: 'bar' }, {}, function(err, result) {
       assert.ok(connected);
-      inserted = true;
-      db.close();
+      insertedId = result.insertedId;
       finish();
     });
 
-    var uri = 'mongodb://localhost/mongoose_test';
-    db.open(process.env.MONGOOSE_TEST_URI || uri, function(err) {
+    const uri = 'mongodb://localhost:27017/mongoose_test';
+    db.openUri(process.env.MONGOOSE_TEST_URI || uri, { useNewUrlParser: true }, function(err) {
       connected = !err;
       finish();
     });
   });
 
+  it('returns a promise if buffering and no callback (gh-7676)', function(done) {
+    const db = mongoose.createConnection();
+    const collection = db.collection('gh7676');
+
+    const promise = collection.insertOne({ foo: 'bar' }, {})
+      .then(result =>
+        collection.findOne({ _id: result.insertedId })
+      ).then(doc => {
+        assert.strictEqual(doc.foo, 'bar');
+      });
+
+    const uri = 'mongodb://localhost:27017/mongoose_test';
+    db.openUri(process.env.MONGOOSE_TEST_URI || uri, { useNewUrlParser: true }, function(err) {
+      assert.ifError(err);
+      promise.then(() => done(), done);
+    });
+  });
+
   it('methods should that throw (unimplemented)', function(done) {
-    var collection = new Collection('test', mongoose.connection)
-      , thrown = false;
+    const collection = new Collection('test', mongoose.connection);
+    let thrown = false;
 
     try {
       collection.getIndexes();
@@ -68,9 +94,9 @@ describe('collections:', function() {
     thrown = false;
 
     try {
-      collection.insert();
+      collection.insertOne();
     } catch (e) {
-      assert.ok(/unimplemented/.test(e.message));
+      assert.ok(/unimplemented/.test(e.message), e.message);
       thrown = true;
     }
 

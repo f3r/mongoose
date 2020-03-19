@@ -1,13 +1,13 @@
+'use strict';
+const mongoose = require('../../lib');
+const Benchmark = require('benchmark');
 
-var mongoose = require('../../lib');
-var Benchmark = require('benchmark');
+const suite = new Benchmark.Suite();
 
-var suite = new Benchmark.Suite();
-
-var Schema = mongoose.Schema;
-var mongo = require('mongodb');
-var utils = require('../../lib/utils.js');
-var ObjectId = Schema.Types.ObjectId;
+const Schema = mongoose.Schema;
+const mongo = require('mongodb');
+const utils = require('../../lib/utils.js');
+const ObjectId = Schema.Types.ObjectId;
 
 // to make things work in the way the are normally described online...
 /*
@@ -21,11 +21,17 @@ var ObjectId = Schema.Types.ObjectId;
 
 
 mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
-  if (err) throw err;
-  mongo.connect('mongodb://localhost/mongoose-bench', function(err, db) {
-    if (err) throw err;
+  if (err) {
+    throw err;
+  }
+  mongo.connect('mongodb://localhost', function(err, client) {
+    if (err) {
+      throw err;
+    }
 
-    var Comments = new Schema;
+    const db = client.db('mongoose-bench');
+
+    const Comments = new Schema;
     Comments.add({
       title: String,
       date: Date,
@@ -33,7 +39,7 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
       comments: [Comments]
     });
 
-    var BlogPost = new Schema({
+    let BlogPost = new Schema({
       title: String,
       author: String,
       slug: String,
@@ -54,20 +60,20 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
       }
     });
 
-    var blogData = {
+    const blogData = {
       title: 'dummy post',
       author: 'somebody',
       slug: 'test.post',
       date: new Date(),
-      meta: { date : new Date(), visitors: 9001},
+      meta: {date: new Date(), visitors: 9001},
       published: true,
-      mixed: { thisIsRandom : true },
-      numbers: [1,2,7,10,23432],
+      mixed: {thisIsRandom: true},
+      numbers: [1, 2, 7, 10, 23432],
       tags: ['test', 'BENCH', 'things', 'more things'],
       def: 'THANGS!!!',
       comments: []
     };
-    var commentData = {
+    const commentData = {
       title: 'test comment',
       date: new Date(),
       body: 'this be some crazzzyyyyy text that would go in a comment',
@@ -77,27 +83,27 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
         body: 'texttt'
       }]
     };
-    for (var i = 0; i < 5; i++) {
+    for (let i = 0; i < 5; i++) {
       blogData.comments.push(commentData);
     }
-    var data = {
-      name : "name",
-      age : 0,
-      likes : ["dogs", "cats", "pizza"],
-      address : " Nowhere-ville USA"
+    const data = {
+      name: 'name',
+      age: 0,
+      likes: ['dogs', 'cats', 'pizza'],
+      address: ' Nowhere-ville USA'
     };
 
-    var UserSchema = new Schema({
-      name : String,
+    const UserSchema = new Schema({
+      name: String,
       age: Number,
       likes: [String],
       address: String
     });
 
-    var User = mongoose.model('User', UserSchema);
+    const User = mongoose.model('User', UserSchema);
     BlogPost = mongoose.model('BlogPost', BlogPost);
-    var user = db.collection('user');
-    var blogpost = db.collection('blogpost');
+    const user = db.collection('user');
+    const blogpost = db.collection('blogpost');
 
     function closeDB() {
       mongoose.connection.db.dropDatabase(function() {
@@ -107,60 +113,67 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
     }
 
     suite.add('Insert - Mongoose - Basic', {
-      defer : true,
-      fn : function(deferred) {
-        var nData = utils.clone(data);
+      defer: true,
+      fn: function(deferred) {
+        const nData = utils.clone(data);
         User.create(nData, function(err) {
-          if (err) throw err;
+          if (err) {
+            throw err;
+          }
           deferred.resolve();
         });
       }
     }).add('Insert - Driver - Basic', {
-      defer : true,
-      fn : function(deferred) {
-        var nData = utils.clone(data);
+      defer: true,
+      fn: function(deferred) {
+        const nData = utils.clone(data);
         user.insert(nData, function(err) {
-          if (err) throw err;
+          if (err) {
+            throw err;
+          }
           deferred.resolve();
         });
       }
     }).add('Insert - Mongoose - Embedded Docs', {
-      defer : true,
-      fn : function(deferred) {
-        var bp = utils.clone(blogData);
+      defer: true,
+      fn: function(deferred) {
+        const bp = utils.clone(blogData);
         BlogPost.create(bp, function(err) {
-          if (err) throw err;
+          if (err) {
+            throw err;
+          }
           deferred.resolve();
         });
       }
     }).add('Insert - Driver - Embedded Docs', {
-      defer : true,
-      fn : function(deferred) {
-
-        var bp = utils.clone(blogData);
+      defer: true,
+      fn: function(deferred) {
+        const bp = utils.clone(blogData);
         blogpost.insert(bp, function(err) {
-          if (err) throw err;
+          if (err) {
+            throw err;
+          }
           deferred.resolve();
         });
       }
     })
-    .on('cycle', function(evt) {
-      if (process.env.MONGOOSE_DEV || process.env.PULL_REQUEST) {
-        console.log(String(evt.target));
-      }
-    }).on('complete', function() {
-      closeDB();
-      if (!process.env.MONGOOSE_DEV && !process.env.PULL_REQUEST) {
-        var outObj = {};
-        this.forEach(function(item) {
-          var out = {};
-          out.stats = item.stats;
-          delete out.stats.sample;
-          out.ops = item.hz;
-          outObj[item.name.replace(/\s/g, "")] = out;
-        });
-        console.log(JSON.stringify(outObj));
-      }
-    }).run({ async : true });
+      .on('cycle', function(evt) {
+        if (process.env.MONGOOSE_DEV || process.env.PULL_REQUEST) {
+          console.log(String(evt.target));
+        }
+      }).on('complete', function() {
+        closeDB();
+        if (!process.env.MONGOOSE_DEV && !process.env.PULL_REQUEST) {
+          const outObj = {};
+          this.forEach(function(item) {
+            const out = {};
+            out.stats = item.stats;
+            delete out.stats.sample;
+            out.ops = item.hz;
+            outObj[item.name.replace(/\s/g, '')] = out;
+          });
+          console.dir(outObj, {depth: null, colors: true});
+        }
+      }).run({async: true});
   });
 });

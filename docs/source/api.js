@@ -1,240 +1,199 @@
+'use strict';
+
 /*!
  * Module dependencies
  */
 
-var fs = require('fs');
-var link = require('../helpers/linktype');
-var hl = require('highlight.js')
-var md = require('markdown')
+const dox = require('dox');
+const fs = require('fs');
+const link = require('../helpers/linktype');
+const hl = require('highlight.js');
+const md = require('marked');
+
+const files = [
+  'lib/index.js',
+  'lib/schema.js',
+  'lib/connection.js',
+  'lib/document.js',
+  'lib/model.js',
+  'lib/query.js',
+  'lib/cursor/QueryCursor.js',
+  'lib/aggregate.js',
+  'lib/cursor/AggregationCursor.js',
+  'lib/schematype.js',
+  'lib/virtualtype.js',
+  'lib/error/index.js',
+  'lib/types/core_array.js',
+  'lib/schema/documentarray.js',
+  'lib/schema/SingleNestedPath.js',
+  'lib/options/SchemaTypeOptions.js',
+  'lib/options/SchemaArrayOptions.js',
+  'lib/options/SchemaBufferOptions.js',
+  'lib/options/SchemaDateOptions.js',
+  'lib/options/SchemaNumberOptions.js',
+  'lib/options/SchemaObjectIdOptions.js',
+  'lib/options/SchemaStringOptions.js'
+];
 
 module.exports = {
-    docs: []
-  , github: 'https://github.com/LearnBoost/mongoose/blob/'
-  , title: 'API docs'
+  docs: [],
+  github: 'https://github.com/Automattic/mongoose/blob/',
+  title: 'API docs',
+  api: true
+};
+
+const out = module.exports.docs;
+
+const combinedFiles = [];
+for (const file of files) {
+  const comments = dox.parseComments(fs.readFileSync(`./${file}`, 'utf8'));
+  comments.file = file;
+  combinedFiles.push(comments);
 }
 
-var out = module.exports.docs;
+parse();
 
-var docs = fs.readFileSync(__dirname + '/_docs', 'utf8');
-parse(docs);
-order(out);
+function parse() {
+  for (const props of combinedFiles) {
+    let name = props.file.
+      replace('lib/', '').
+      replace('.js', '').
+      replace('/index', '');
+    const lastSlash = name.lastIndexOf('/');
+    name = name.substr(lastSlash === -1 ? 0 : lastSlash + 1);
+    if (name === 'core_array') {
+      name = 'array';
+    }
+    if (name === 'documentarray') {
+      name = 'DocumentArrayPath';
+    }
+    const data = {
+      name: name.charAt(0).toUpperCase() === name.charAt(0) ? name : name.charAt(0).toUpperCase() + name.substr(1),
+      props: []
+    };
 
-function parse (docs) {
-  docs.split(/^### /gm).forEach(function (chunk) {
-    if (!(chunk = chunk.trim())) return;
+    for (const prop of props) {
+      if (prop.ignore || prop.isPrivate) {
+        continue;
+      }
 
-    chunk = chunk.split(/^([^\n]+)\n/);
-
-    var fulltitle = chunk[1];
-
-    if (!fulltitle || !(fulltitle = fulltitle.trim()))
-      throw new Error('missing title');
-
-    var title = fulltitle.replace(/^lib\//, '');
-    var json = JSON.parse(chunk[2]);
-
-    var props = [];
-    var methods = [];
-    var statics = [];
-    var constructor = null;
-
-    json.forEach(function (comment) {
-      if (comment.description)
-        highlight(comment.description);
-
-      var prop = false;
-      comment.params = [];
-      comment.see = [];
-
-      var i = comment.tags.length;
-      while (i--) {
-        var tag = comment.tags[i];
+      const ctx = prop.ctx || {};
+      for (const tag of prop.tags) {
         switch (tag.type) {
-        case 'property':
-          prop = true;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.name = tag.string;
-          props.unshift(comment);
-          break;
-        case 'method':
-          prop = false;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.name || (comment.ctx.name = tag.string);
-          comment.ctx.type = 'method';
-          comment.code = '';
-          break;
-        case 'memberOf':
-          prop = false;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.constructor = tag.parent;
-          break;
-        case 'static':
-          prop = false;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.name = tag.string;
-          comment.ctx.type = 'static';
-          break;
-        case 'receiver':
-          prop = false;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.receiver = tag.string;
-          break;
-        case 'constructor':
-          prop = false;
-          comment.ctx || (comment.ctx = {});
-          comment.ctx.name || (comment.ctx.name = tag.string);
-          comment.ctx.type = 'function';
-          comment.code = '';
-          break;
-        case 'inherits':
-          if (/http/.test(tag.string)) {
-            var result = tag.string.split(' ');
-            var href = result.pop();
-            var title = result.join(' ');
-            comment.inherits = '<a href="'
-                     + href
-                     + '" title="' + title + '">' + title + '</a>';
-          } else {
-            comment.inherits = link(tag.string);
-          }
-          comment.tags.splice(i, 1);
-          break;
-        case 'param':
-          comment.params.unshift(tag);
-          comment.tags.splice(i, 1);
-          break;
-        case 'return':
-          comment.return = tag;
-          comment.tags.splice(i, 1);
-          break;
-        case 'see':
-          if (tag.local) {
-            var parts = tag.local.split(' ');
-            if (1 === parts.length) {
-              tag.url = link.type(parts[0]);
-              tag.title = parts[0];
-            } else {
-              tag.url = parts.pop();
-              tag.title = parts.join(' ');
+          case 'receiver':
+            ctx.constructor = tag.string;
+            break;
+          case 'property':
+            ctx.type = 'property';
+            let str = tag.string;
+            const match = str.match(/^{\w+}/);
+            if (match != null) {
+              ctx.type = match[0].substring(1, match[0].length - 1);
+              str = str.replace(/^{\w+}\s*/, '');
             }
-          }
-          comment.see.unshift(tag);
-          comment.tags.splice(i, 1);
-          break;
-        case 'event':
-          var str = tag.string.replace(/\\n/g, '\n');
-          tag.string = md.parse(str).replace(/\n/g, '\\n').replace(/'/g, '&#39;');
-          comment.events || (comment.events = []);
-          comment.events.unshift(tag);
-          comment.tags.splice(i, 1);
+            ctx.name = str;
+            ctx.string = `${ctx.constructor}.prototype.${ctx.name}`;
+            break;
+          case 'type':
+            ctx.type = Array.isArray(tag.types) ? tag.types.join('|') : tag.types;
+            break;
+          case 'static':
+            ctx.type = 'property';
+            ctx.static = true;
+            ctx.name = tag.string;
+            ctx.string = `${ctx.constructor}.${ctx.name}`;
+            break;
+          case 'function':
+            ctx.type = 'function';
+            ctx.static = true;
+            ctx.name = tag.string;
+            ctx.string = `${ctx.constructor}.${ctx.name}()`;
+            break;
+          case 'return':
+            tag.description = tag.description ?
+              md.parse(tag.description).replace(/^<p>/, '').replace(/<\/p>$/, '') :
+              '';
+            ctx.return = tag;
+            break;
+          case 'inherits':
+            ctx[tag.type] = tag.string;
+            break;
+          case 'event':
+          case 'param':
+            ctx[tag.type] = (ctx[tag.type] || []);
+            if (tag.types) {
+              tag.types = tag.types.join('|');
+            }
+            ctx[tag.type].push(tag);
+            if (tag.name != null && tag.name.startsWith('[') && tag.name.endsWith(']') && tag.name.includes('.')) {
+              tag.nested = true;
+            }
+            tag.description = tag.description ?
+              md.parse(tag.description).replace(/^<p>/, '').replace(/<\/p>$/, '') :
+              '';
+            break;
+          case 'method':
+            ctx.type = 'method';
+            ctx.name = tag.string;
+            ctx.string = `${ctx.constructor}.prototype.${ctx.name}()`;
+            break;
+          case 'memberOf':
+            ctx.constructor = tag.parent;
+            ctx.string = `${ctx.constructor}.prototype.${ctx.name}`;
+            if (ctx.type === 'method') {
+              ctx.string += '()';
+            }
+            break;
+          case 'constructor':
+            ctx.string = tag.string + '()';
+            ctx.name = tag.string;
         }
       }
 
-      if (!prop) {
-        methods.push(comment);
+      if (/\.prototype[^.]/.test(ctx.string)) {
+        ctx.string = `${ctx.constructor}.prototype.${ctx.name}`;
+      }
+      // Backwards compat
+      if (typeof ctx.constructor === 'string') {
+        ctx.anchorId = `${ctx.constructor.toLowerCase()}_${ctx.constructor}-${ctx.name}`;
+      } else if (typeof ctx.receiver === 'string') {
+        ctx.anchorId = `${ctx.receiver.toLowerCase()}_${ctx.receiver}.${ctx.name}`;
+      } else {
+        ctx.anchorId = `${ctx.name.toLowerCase()}_${ctx.name}`;
+      }
+
+      ctx.description = prop.description.full.
+        replace(/<br \/>/ig, ' ').
+        replace(/&gt;/i, '>');
+      ctx.description = highlight(ctx.description);
+
+      data.props.push(ctx);
+    }
+
+    data.props.sort(function(a, b) {
+      if (a.string < b.string) {
+        return -1;
+      } else {
+        return 1;
       }
     });
 
-    methods = methods.filter(ignored);
-    props = props.filter(ignored);
-
-    function ignored (method) {
-      if (method.ignore) return false;
-      return true;
+    if (props.file.startsWith('lib/options')) {
+      data.hideFromNav = true;
     }
 
-    if (0 === methods.length + props.length) return;
-
-    // add constructor to properties too
-    methods.some(function (method) {
-      if (method.ctx && 'method' == method.ctx.type && method.ctx.hasOwnProperty('constructor')) {
-        props.forEach(function (prop) {
-          prop.ctx.constructor = method.ctx.constructor;
-        });
-        return true;
-      }
-      return false;
-    });
-
-    var len = methods.length;
-    while (len--) {
-      method = methods[len];
-      if (method.ctx && method.ctx.receiver) {
-        var stat = methods.splice(len, 1)[0];
-        statics.unshift(stat);
-      }
-    }
-
-    out.push({
-        title: title
-      , fulltitle: fulltitle
-      , cleantitle: title.replace(/[\.\/#]/g, '-')
-      , methods: methods
-      , props: props
-      , statics: statics
-      , hasPublic: hasPublic(methods, props, statics)
-    });
-  });
-}
-
-function hasPublic () {
-  for (var i = 0; i < arguments.length; ++i) {
-    var arr = arguments[i];
-    for (var j = 0; j < arr.length; ++j) {
-      var item = arr[j];
-      if (!item.ignore && !item.isPrivate) return true;
-    }
+    out.push(data);
   }
-  return false;
 }
 
-// add "class='language'" to our <pre><code> elements
-function highlight (o) {
-  o.full = fix(o.full);
-  o.summary = fix(o.summary);
-  o.body = fix(o.body);
-}
+function highlight(str) {
+  return str.replace(/(<pre><code>)([^<]+)(<\/code)/gm, function(_, $1, $2, $3) {
+    const code = /^(?:`{3}([^\n]+)\n)?([\s\S]*)/gm.exec($2);
 
-function fix (str) {
-  return str.replace(/(<pre><code>)([^<]+)(<\/code)/gm, function (_, $1, $2, $3) {
-
-    // parse out the ```language
-    var code = /^(?:`{3}([^\n]+)\n)?([\s\S]*)/gm.exec($2);
-
-    if ('js' == code[1] || !code[1]) {
+    if ('js' === code[1] || !code[1]) {
       code[1] = 'javascript';
     }
 
-    return $1
-          + hl.highlight(code[1], code[2]).value.trim()
-          + $3;
+    return $1 + hl.highlight(code[1], code[2]).value.trim() + $3;
   });
-}
-
-function order (docs) {
-  var sortByCtxName = function (a, b) {
-    if (!a.ctx) {
-      console.error('missing ctx', a);
-    }
-    if (!b.ctx) {
-      console.error('missing ctx', b);
-    }
-    return a.ctx.name.localeCompare(b.ctx.name);
-  };
-
-  // want index first
-  for (var i = 0; i < docs.length; ++i) {
-    var doc = docs[i];
-
-    if ('index.js' == doc.title) {
-      docs.unshift(docs.splice(i, 1)[0]);
-    } else if ('collection.js' == doc.title) {
-      docs.push(docs.splice(i, 1)[0]);
-    }
-
-    // sort methods, statics and properties alphabetically
-    doc.methods.sort(sortByCtxName);
-    doc.statics.sort(sortByCtxName);
-    doc.props.sort(sortByCtxName);
-  }
 }

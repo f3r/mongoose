@@ -3,43 +3,46 @@
  * Test dependencies.
  */
 
-var start = require('./common')
-  , mongoose = start.mongoose
-  , assert = require('assert')
-  , random = require('../lib/utils').random
-  , Aggregate = require('../lib/aggregate')
-  , Schema = mongoose.Schema;
+'use strict';
+
+const start = require('./common');
+
+const Aggregate = require('../lib/aggregate');
+const assert = require('assert');
+const random = require('../lib/utils').random;
+
+const mongoose = start.mongoose;
+const Schema = mongoose.Schema;
 
 /**
  * Setup.
  */
 
-var userSchema = new Schema({
-  name: String
-  , age: Number
+const userSchema = new Schema({
+  name: String,
+  age: Number
 });
 
-var collection = 'aggregate_' + random();
-mongoose.model('Aggregate', userSchema);
-
 describe('model aggregate', function() {
-  var group = { $group: { _id: null, maxAge: { $max: '$age' } }};
-  var project = { $project: { maxAge: 1, _id: 0 }};
-  var db, A, maxAge;
+  this.timeout(process.env.TRAVIS ? 8000 : 4500);
 
-  var mongo26_or_greater = false;
+  const group = { $group: { _id: null, maxAge: { $max: '$age' } } };
+  const project = { $project: { maxAge: 1, _id: 0 } };
+  let db, A, maxAge;
+
+  let mongo26_or_greater = false;
 
   before(function(done) {
     db = start();
-    A = db.model('Aggregate', collection);
+    A = db.model('Test', userSchema);
 
-    var authors = 'guillermo nathan tj damian marco'.split(' ');
-    var num = 10;
-    var docs = [];
+    const authors = 'guillermo nathan tj damian marco'.split(' ');
+    const num = 10;
+    const docs = [];
     maxAge = 0;
 
-    for (var i = 0; i < num; ++i) {
-      var age = Math.random() * 100 | 0;
+    for (let i = 0; i < num; ++i) {
+      const age = Math.random() * 100 | 0;
       maxAge = Math.max(maxAge, age);
       docs.push({ author: authors[i % authors.length], age: age });
     }
@@ -48,7 +51,7 @@ describe('model aggregate', function() {
       assert.ifError(err);
       start.mongodVersion(function(err, version) {
         if (err) throw err;
-        mongo26_or_greater = 2 < version[0] || (2 == version[0] && 6 <= version[1]);
+        mongo26_or_greater = version[0] > 2 || (version[0] === 2 && version[1] >= 6);
         if (!mongo26_or_greater) console.log('not testing mongodb 2.6 features');
         done();
       });
@@ -60,11 +63,8 @@ describe('model aggregate', function() {
   });
 
   describe('works', function() {
-    it('with argument lists', function(done) {
-      this.timeout(4000);
-
-      A.aggregate(group, project, function(err, res) {
-        assert.ifError(err);
+    it('when return promise', function(done) {
+      A.aggregate([group, project]).then(function(res) {
         assert.ok(res);
         assert.equal(1, res.length);
         assert.ok('maxAge' in res[0]);
@@ -74,39 +74,32 @@ describe('model aggregate', function() {
     });
 
     it('with arrays', function(done) {
-      this.timeout(4000);
-
       A.aggregate([group, project], function(err, res) {
         assert.ifError(err);
         assert.ok(res);
-        assert.equal(1, res.length);
+        assert.equal(res.length, 1);
         assert.ok('maxAge' in res[0]);
-        assert.equal(maxAge, res[0].maxAge);
+        assert.equal(res[0].maxAge, maxAge);
         done();
       });
     });
 
     it('with Aggregate syntax', function(done) {
-      this.timeout(4000);
-
-      var promise = A.aggregate()
+      A.aggregate()
         .group(group.$group)
         .project(project.$project)
         .exec(function(err, res) {
           assert.ifError(err);
-          assert.ok(promise instanceof mongoose.Promise);
           assert.ok(res);
-          assert.equal(1, res.length);
+          assert.equal(res.length, 1);
           assert.ok('maxAge' in res[0]);
-          assert.equal(maxAge, res[0].maxAge);
+          assert.equal(res[0].maxAge, maxAge);
           done();
         });
     });
 
     it('with Aggregate syntax if callback not provided', function(done) {
-      this.timeout(4000);
-
-      var promise = A.aggregate()
+      const promise = A.aggregate()
         .group(group.$group)
         .project(project.$project)
         .exec();
@@ -114,15 +107,20 @@ describe('model aggregate', function() {
       promise.then(function(res) {
         assert.ok(promise instanceof mongoose.Promise);
         assert.ok(res);
-        assert.equal(1, res.length);
+        assert.equal(res.length, 1);
         assert.ok('maxAge' in res[0]);
         assert.equal(maxAge, res[0].maxAge);
         done();
-      }).end();
+      });
     });
 
     it('when returning Aggregate', function(done) {
-      assert(A.aggregate(project) instanceof Aggregate);
+      assert(A.aggregate([project]) instanceof Aggregate);
+      done();
+    });
+
+    it('throws when passing object (gh-6732)', function(done) {
+      assert.throws(() => A.aggregate({}), /disallows passing a spread/);
       done();
     });
 
@@ -131,9 +129,7 @@ describe('model aggregate', function() {
         return done();
       }
 
-      this.timeout(4000);
-
-      var outputCollection = 'aggregate_output_' + random();
+      const outputCollection = 'aggregate_output_' + random();
       A.aggregate()
         .group(group.$group)
         .project(project.$project)
@@ -142,7 +138,7 @@ describe('model aggregate', function() {
           assert.ifError(error);
           A.db.collection(outputCollection).find().toArray(function(error, documents) {
             assert.ifError(error);
-            assert.equal(1, documents.length);
+            assert.equal(documents.length, 1);
             assert.ok('maxAge' in documents[0]);
             assert.equal(maxAge, documents[0].maxAge);
             done();
