@@ -1,5 +1,4 @@
 
-'use strict';
 var types = {};
 types.Object = 'https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object';
 types.Boolean = 'https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Boolean'
@@ -40,7 +39,7 @@ types.any = 'nolink';
 
 module.exports= function (type) {
   if (types[type]) {
-    if ('nolink' === types[type]) return 'T';
+    if ('nolink' == types[type]) return 'T';
     return '<a href="' + types[type] + '">' + type + '</a>';
   }
   return '<a href="#' + type + '">' + type + '</a>';

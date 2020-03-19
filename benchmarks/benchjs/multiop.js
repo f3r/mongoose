@@ -1,13 +1,13 @@
-'use strict';
-const mongoose = require('../../lib');
-const Benchmark = require('benchmark');
 
-const suite = new Benchmark.Suite();
+var mongoose = require('../../lib');
+var Benchmark = require('benchmark');
 
-const Schema = mongoose.Schema;
-const ObjectId = Schema.Types.ObjectId;
-const mongo = require('mongodb');
-const utils = require('../../lib/utils.js');
+var suite = new Benchmark.Suite();
+
+var Schema = mongoose.Schema;
+var ObjectId = Schema.Types.ObjectId;
+var mongo = require('mongodb');
+var utils = require('../../lib/utils.js');
 
 // to make things work in the way the are normally described online...
 /*
@@ -21,17 +21,11 @@ const utils = require('../../lib/utils.js');
 
 
 mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
-  if (err) {
-    throw err;
-  }
-  mongo.connect('mongodb://localhost', function(err, client) {
-    if (err) {
-      throw err;
-    }
+  if (err) throw err;
+  mongo.connect('mongodb://localhost/mongoose-bench', function(err, db) {
+    if (err) throw err;
 
-    const db = client.db('mongoose-bench');
-
-    const Comments = new Schema;
+    var Comments = new Schema;
     Comments.add({
       title: String,
       date: Date,
@@ -39,7 +33,7 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
       comments: [Comments]
     });
 
-    let BlogPost = new Schema({
+    var BlogPost = new Schema({
       title: String,
       author: String,
       slug: String,
@@ -54,10 +48,10 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
       tags: [String],
       owners: [ObjectId],
       comments: [Comments],
-      def: {type: String, default: 'kandinsky'}
+      def       : { type: String, default: 'kandinsky' }
     });
 
-    const blogData = {
+    var blogData = {
       title: 'dummy post',
       author: 'somebody',
       slug: 'test.post',
@@ -70,87 +64,79 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
       mixed: {
         thisIsRandom: true
       },
-      numbers: [1, 2, 7, 10, 23432],
+      numbers: [1,2,7,10,23432],
       tags: ['test', 'BENCH', 'things', 'more things'],
       def: 'THANGS!!!',
       comments: []
     };
-    const commentData = {
+    var commentData = {
       title: 'test comment',
       date: new Date(),
       body: 'this be some crazzzyyyyy text that would go in a comment',
       comments: [{
-        title: 'second level',
-        date: new Date(),
-        body: 'texttt'
+        title : 'second level',
+        date : new Date(),
+        body : 'texttt'
       }]
     };
-    for (let i = 0; i < 5; i++) {
+    for (var i = 0; i < 5; i++) {
       blogData.comments.push(commentData);
     }
-    const UserSchema = new Schema({
-      name: String,
+    var UserSchema = new Schema({
+      name : String,
       age: Number,
       likes: [String],
       address: String
     });
 
-    const User = mongoose.model('User', UserSchema);
+    var User = mongoose.model('User', UserSchema);
     BlogPost = mongoose.model('BlogPost', BlogPost);
-    const user = db.collection('user');
-    const blogpost = db.collection('blogpost');
+    var user = db.collection('user');
+    var blogpost = db.collection('blogpost');
 
-    const mIds = [];
-    const dIds = [];
+    var mIds = [];
+    var dIds = [];
 
-    const bmIds = [];
-    const bdIds = [];
+    var bmIds = [];
+    var bdIds = [];
 
-    const data = {
-      name: 'name',
-      age: 0,
-      likes: ['dogs', 'cats', 'pizza'],
-      address: ' Nowhere-ville USA'
+    var data = {
+      name : "name",
+      age : 0,
+      likes : ["dogs", "cats", "pizza"],
+      address : " Nowhere-ville USA"
     };
 
     // insert all of the data here
-    let count = 4000;
-    for (let i = 0; i < 1000; i++) {
+    var count = 4000;
+    for (i = 0; i < 1000; i++) {
       data.age = Math.floor(Math.random() * 50);
       User.create(data, function(err, u) {
-        if (err) {
-          throw err;
-        }
+        if (err) throw err;
         mIds.push(u.id);
         --count || next();
       });
-      const nData = utils.clone(data);
+      var nData = utils.clone(data);
       user.insert(nData, function(err, res) {
-        if (err) {
-          throw err;
-        }
-        dIds.push(res.insertedIds[0]);
+        if (err) throw err;
+        dIds.push(res[0]._id);
         --count || next();
       });
       BlogPost.create(blogData, function(err, bp) {
-        if (err) {
-          throw err;
-        }
+        if (err) throw err;
         bmIds.push(bp.id);
         --count || next();
       });
 
-      const bpData = utils.clone(blogData);
+      var bpData = utils.clone(blogData);
       blogpost.insert(bpData, function(err, res) {
-        if (err) {
-          throw err;
-        }
-        bdIds.push(res.insertedIds[0]);
+        if (err) throw err;
+        bdIds.push(res[0]._id);
         --count || next();
       });
     }
 
-    let mi = 0,
+    var mi = 0,
         di = 0,
         bmi = 0,
         bdi = 0;
@@ -183,278 +169,235 @@ mongoose.connect('mongodb://localhost/mongoose-bench', function(err) {
     }
 
     suite.add('Multi-Op - Mongoose - Heavy Read, low write', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        for (let i = 0; i < 150; i++) {
-          User.findOne({_id: getNextmId()}, function(err) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        for (var i = 0; i < 150; i++) {
+          User.findOne({ _id : getNextmId() }, function(err) {
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(data);
+          if (i % 15 == 0) {
+            var nData = utils.clone(data);
             User.create(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
+
       }
     }).add('Multi-Op - Driver - Heavy Read, low write', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        for (let i = 0; i < 150; i++) {
-          user.findOne({_id: getNextdId()}, function(err) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        for (var i = 0; i < 150; i++) {
+          user.findOne({ _id : getNextdId() }, function(err) {
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(data);
+          if (i % 15 == 0) {
+            var nData = utils.clone(data);
             user.insert(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Mongoose - Embedded Docs - Heavy Read, low write', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        for (let i = 0; i < 150; i++) {
-          BlogPost.findOne({_id: getNextbmId()}, function(err) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        for (var i = 0; i < 150; i++) {
+          BlogPost.findOne({ _id : getNextbmId() }, function(err) {
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(blogData);
+          if (i % 15 == 0) {
+            var nData = utils.clone(blogData);
             BlogPost.create(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Driver - Embedded Docs - Heavy Read, low write', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        for (let i = 0; i < 150; i++) {
-          blogpost.findOne({_id: getNextbdId()}, function(err) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        for (var i = 0; i < 150; i++) {
+          blogpost.findOne({ _id : getNextbdId() }, function(err) {
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(blogData);
+          if (i % 15 == 0) {
+            var nData = utils.clone(blogData);
             blogpost.insert(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Mongoose - Heavy Write, low read', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
 
-        for (let i = 0; i < 150; i++) {
-          const nData = utils.clone(data);
+        for (var i = 0; i < 150; i++) {
+          var nData = utils.clone(data);
           User.create(nData, function(err) {
-            if (err) {
-              throw err;
-            }
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            User.findOne({_id: getNextmId()}, function(err) {
-              if (err) {
-                throw err;
-              }
+          if (i % 15 == 0) {
+            User.findOne({ _id : getNextmId() }, function(err) {
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Driver - Heavy Write, low read', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
 
-        for (let i = 0; i < 150; i++) {
-          const nData = utils.clone(data);
+        for (var i = 0; i < 150; i++) {
+          var nData = utils.clone(data);
           user.insert(nData, function(err) {
-            if (err) {
-              throw err;
-            }
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            user.findOne({_id: getNextdId()}, function(err) {
-              if (err) {
-                throw err;
-              }
+          if (i % 15 == 0) {
+            user.findOne({ _id : getNextdId() }, function(err) {
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Mongoose - Embedded Docs - Heavy Write, low read', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
 
-        for (let i = 0; i < 150; i++) {
-          const nData = utils.clone(blogData);
+        for (var i = 0; i < 150; i++) {
+          var nData = utils.clone(blogData);
           BlogPost.create(nData, function(err) {
-            if (err) {
-              throw err;
-            }
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            BlogPost.findOne({_id: getNextbmId()}, function(err) {
-              if (err) {
-                throw err;
-              }
+          if (i % 15 == 0) {
+            BlogPost.findOne({ _id : getNextbmId() }, function(err) {
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Driver - Embedded Docs - Heavy Write, low read', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
 
-        for (let i = 0; i < 150; i++) {
-          const nData = utils.clone(blogData);
+        for (var i = 0; i < 150; i++) {
+          var nData = utils.clone(blogData);
           blogpost.insert(nData, function(err) {
-            if (err) {
-              throw err;
-            }
+            if (err) throw err;
             --count || deferred.resolve();
           });
-          if (i % 15 === 0) {
-            blogpost.findOne({_id: getNextbdId()}, function(err) {
-              if (err) {
-                throw err;
-              }
+          if (i % 15 == 0) {
+            blogpost.findOne({ _id : getNextbdId() }, function(err) {
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Mongoose - Embedded Docs - Read-write-update', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        let updates = 0;
-        for (let i = 0; i < 150; i++) {
-          BlogPost.findOne({_id: getNextbmId()}, function(err, res) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        var updates = 0;
+        for (var i = 0; i < 150; i++) {
+          BlogPost.findOne({ _id : getNextbmId() }, function(err, res) {
+            if (err) throw err;
             if (updates < 20) {
               updates++;
-              res.author = 'soemthing new';
+              res.author = "soemthing new";
               res.comments.push(commentData);
-              res.title = 'something newerrrr';
+              res.title = "something newerrrr";
               res.save(function(err) {
-                if (err) {
-                  throw err;
-                }
+                if (err) throw err;
                 --count || deferred.resolve();
               });
             } else {
               --count || deferred.resolve();
             }
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(blogData);
+          if (i % 15 == 0) {
+            var nData = utils.clone(blogData);
             BlogPost.create(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     }).add('Multi-Op - Driver - Embedded Docs - Read-write-update', {
-      defer: true,
-      fn: function(deferred) {
-        let count = 150;
-        let updates = 0;
-        for (let i = 0; i < 150; i++) {
-          blogpost.findOne({_id: getNextbdId()}, function(err, bp) {
-            if (err) {
-              throw err;
-            }
+      defer : true,
+      fn : function(deferred) {
+        var count = 150;
+        var updates = 0;
+        for (var i = 0; i < 150; i++) {
+          blogpost.findOne({ _id : getNextbdId() }, function(err, bp) {
+            if (err) throw err;
             if (updates < 20) {
               updates++;
-              bp.author = 'soemthing new';
+              bp.author = "soemthing new";
               bp.comments.push(commentData);
-              bp.title = 'something newerrrr';
+              bp.title = "something newerrrr";
               blogpost.save(bp, function(err) {
-                if (err) {
-                  throw err;
-                }
+                if (err) throw err;
                 --count || deferred.resolve();
               });
             } else {
               --count || deferred.resolve();
             }
           });
-          if (i % 15 === 0) {
-            const nData = utils.clone(blogData);
+          if (i % 15 == 0) {
+            var nData = utils.clone(blogData);
             blogpost.insert(nData, function(err) {
-              if (err) {
-                throw err;
-              }
+              if (err) throw err;
               --count || deferred.resolve();
             });
           }
         }
       }
     })
-      .on('cycle', function(evt) {
-        if (process.env.MONGOOSE_DEV || process.env.PULL_REQUEST) {
-          console.log(String(evt.target));
-        }
-      }).on('complete', function() {
-        closeDB();
-        if (!process.env.MONGOOSE_DEV && !process.env.PULL_REQUEST) {
-          const outObj = {};
-          this.forEach(function(item) {
-            const out = {};
-            out.stats = item.stats;
-            delete out.stats.sample;
-            out.ops = item.hz;
-            outObj[item.name.replace(/\s/g, '')] = out;
-          });
-          console.dir(outObj, {depth: null, colors: true});
-        }
-      });
+    .on('cycle', function(evt) {
+      if (process.env.MONGOOSE_DEV || process.env.PULL_REQUEST) {
+        console.log(String(evt.target));
+      }
+    }).on('complete', function() {
+      closeDB();
+      if (!process.env.MONGOOSE_DEV && !process.env.PULL_REQUEST) {
+        var outObj = {};
+        this.forEach(function(item) {
+          var out = {};
+          out.stats = item.stats;
+          delete out.stats.sample;
+          out.ops = item.hz;
+          outObj[item.name.replace(/\s/g, "")] = out;
+        });
+        console.log(JSON.stringify(outObj));
+      }
+    });
     function next() {
-      suite.run({async: true});
+      suite.run({ async : true });
     }
   });
 });

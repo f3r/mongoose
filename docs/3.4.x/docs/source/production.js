@@ -1,5 +1,4 @@
 
-'use strict';
 var fs = require('fs')
 var images = fs.readFileSync(__dirname + '/../images/apps/urls', 'utf-8').split('\n');
 

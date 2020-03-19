@@ -1,14 +1,9 @@
-'use strict';
-
-require('./common');
-
-const Schema = require('../lib/schema');
-const assert = require('assert');
-const updateValidators = require('../lib/helpers/updateValidators');
-const emitter = require('events').EventEmitter;
+var assert = require('assert');
+var updateValidators = require('../lib/services/updateValidators');
+var emitter = require('events').EventEmitter;
 
 describe('updateValidators', function() {
-  let schema;
+  var schema;
 
   beforeEach(function() {
     schema = {};
@@ -27,30 +22,25 @@ describe('updateValidators', function() {
 
   describe('validators', function() {
     it('flattens paths', function(done) {
-      const fn = updateValidators({}, schema, { test: { a: 1, b: null } }, {});
+      var fn = updateValidators({}, schema, { test: { a: 1, b: null } }, {});
       schema.doValidate.emitter.on('called', function(args) {
         args.cb();
       });
       fn(function(err) {
         assert.ifError(err);
-        assert.equal(schema._getSchema.calls.length, 3);
-        assert.equal(schema.doValidate.calls.length, 3);
-        assert.equal(schema._getSchema.calls[0], 'test');
-        assert.equal(schema._getSchema.calls[1], 'test.a');
-        assert.equal(schema._getSchema.calls[2], 'test.b');
-        assert.deepEqual(schema.doValidate.calls[0].v, {
-          a: 1,
-          b: null
-        });
-        assert.equal(schema.doValidate.calls[1].v, 1);
-        assert.equal(schema.doValidate.calls[2].v, null);
+        assert.equal(schema._getSchema.calls.length, 2);
+        assert.equal(schema.doValidate.calls.length, 2);
+        assert.equal('test.a', schema._getSchema.calls[0]);
+        assert.equal('test.b', schema._getSchema.calls[1]);
+        assert.equal(1, schema.doValidate.calls[0].v);
+        assert.equal(null, schema.doValidate.calls[1].v);
         done();
       });
     });
 
     it('doesnt flatten dates (gh-3194)', function(done) {
-      const dt = new Date();
-      const fn = updateValidators({}, schema, { test: dt }, {});
+      var dt = new Date();
+      var fn = updateValidators({}, schema, { test: dt }, {});
       schema.doValidate.emitter.on('called', function(args) {
         args.cb();
       });
@@ -58,52 +48,8 @@ describe('updateValidators', function() {
         assert.ifError(err);
         assert.equal(schema._getSchema.calls.length, 1);
         assert.equal(schema.doValidate.calls.length, 1);
-        assert.equal(schema._getSchema.calls[0], 'test');
+        assert.equal('test', schema._getSchema.calls[0]);
         assert.equal(dt, schema.doValidate.calls[0].v);
-        done();
-      });
-    });
-
-    it('doesnt flatten empty arrays (gh-3554)', function(done) {
-      const fn = updateValidators({}, schema, { test: [] }, {});
-      schema.doValidate.emitter.on('called', function(args) {
-        args.cb();
-      });
-      fn(function(err) {
-        assert.ifError(err);
-        assert.equal(schema._getSchema.calls.length, 1);
-        assert.equal(schema.doValidate.calls.length, 1);
-        assert.equal(schema._getSchema.calls[0], 'test');
-        assert.deepEqual(schema.doValidate.calls[0].v, []);
-        done();
-      });
-    });
-
-    it('doesnt flatten decimal128 (gh-7561)', function(done) {
-      const Decimal128Type = require('../lib/types/decimal128');
-      const schema = Schema({ test: { type: 'Decimal128', required: true } });
-      const fn = updateValidators({}, schema, {
-        test: new Decimal128Type('33.426')
-      }, {});
-      fn(function(err) {
-        assert.ifError(err);
-        done();
-      });
-    });
-
-    it('handles nested paths correctly (gh-3587)', function(done) {
-      const schema = Schema({
-        nested: {
-          a: { type: String, required: true },
-          b: { type: String, required: true }
-        }
-      });
-      const fn = updateValidators({}, schema, {
-        nested: { b: 'test' }
-      }, {});
-      fn(function(err) {
-        assert.ok(err);
-        assert.deepEqual(Object.keys(err.errors), ['nested.a']);
         done();
       });
     });

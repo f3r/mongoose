@@ -1,6 +1,6 @@
 
 var fs= require('fs')
-var jade = require('pug')
+var jade = require('jade')
 var package = require('./package')
 var hl = require('./docs/helpers/highlight')
 var linktype = require('./docs/helpers/linktype')

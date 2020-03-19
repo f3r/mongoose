@@ -1,160 +1,79 @@
-'use strict';
 
-Error.stackTraceLimit = Infinity;
+var fs = require('fs');
+var jade = require('jade');
+var package = require('./package');
+var hl = require('./docs/helpers/highlight');
+var linktype = require('./docs/helpers/linktype');
+var href = require('./docs/helpers/href');
+var klass = require('./docs/helpers/klass');
 
-const acquit = require('acquit');
-const fs = require('fs');
-const pug = require('pug');
-const pkg = require('./package');
-const linktype = require('./docs/helpers/linktype');
-const href = require('./docs/helpers/href');
-const klass = require('./docs/helpers/klass');
-const transform = require('acquit-require');
+// add custom jade filters
+require('./docs/helpers/filters')(jade);
 
-require('acquit-ignore')();
+// use last release
+package.version = getVersion();
+package.unstable = getUnstable(package.version);
 
-const markdown = require('marked');
-const highlight = require('highlight.js');
-markdown.setOptions({
-  highlight: function(code) {
-    return highlight.highlight('JavaScript', code).value;
+var filemap = require('./docs/source');
+var files = Object.keys(filemap);
+
+files.forEach(function(file) {
+  var filename = __dirname + '/' + file;
+  jadeify(filename, filemap[file]);
+
+  if ('--watch' == process.argv[2]) {
+    fs.watchFile(filename, { interval: 1000 }, function(cur, prev) {
+      if (cur.mtime > prev.mtime) {
+        jadeify(filename, filemap[file]);
+      }
+    });
   }
 });
 
-const tests = [
-  ...acquit.parse(fs.readFileSync('./test/webpack.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/geojson.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/docs/transactions.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/schema.alias.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/model.middleware.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/docs/date.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/es-next/lean.test.es6.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/es-next/cast.test.es6.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/es-next/findoneandupdate.test.es6.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/docs/custom-casting.test.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/es-next/getters-setters.test.es6.js').toString()),
-  ...acquit.parse(fs.readFileSync('./test/es-next/virtuals.test.es6.js').toString())
-];
+var acquit = require('./docs/source/acquit');
+var acquitFiles = Object.keys(acquit);
+acquitFiles.forEach(function(file) {
+  var filename = __dirname + '/docs/acquit.jade';
+  jadeify(filename, acquit[file], __dirname + '/docs/' + file);
+});
 
-function getVersion() {
-  return require('./package.json').version;
+function jadeify(filename, options, newfile) {
+  options || (options = {});
+  options.package = package;
+  options.hl = hl;
+  options.linktype = linktype;
+  options.href = href;
+  options.klass = klass;
+  jade.renderFile(filename, options, function(err, str) {
+    if (err) return console.error(err.stack);
+
+    newfile = newfile || filename.replace('.jade', '.html');
+    fs.writeFile(newfile, str, function(err) {
+      if (err) return console.error('could not write', err.stack);
+      console.log('%s : rendered ', new Date, newfile);
+    });
+  });
 }
 
-function getLatestLegacyVersion(startsWith) {
-  const hist = fs.readFileSync('./History.md', 'utf8').replace(/\r/g, '\n').split('\n');
-  for (let i = 0; i < hist.length; ++i) {
-    const line = (hist[i] || '').trim();
-    if (!line) {
-      continue;
-    }
-    const match = /^\s*([^\s]+)\s/.exec(line);
-    if (match && match[1] && match[1].startsWith(startsWith)) {
+function getVersion() {
+  var hist = fs.readFileSync('./History.md','utf8').replace(/\r/g, '\n').split('\n');
+  for (var i = 0; i < hist.length; ++i) {
+    var line = (hist[i] || '').trim();
+    if (!line) continue;
+    var match = /^\s*([^\s]+)\s/.exec(line);
+    if (match && match[1])
       return match[1];
-    }
   }
   throw new Error('no match found');
 }
 
-// use last release
-pkg.version = getVersion();
-pkg.latest4x = getLatestLegacyVersion('4.');
-pkg.latest38x = getLatestLegacyVersion('3.8');
-
-require('./docs/splitApiDocs');
-const filemap = Object.assign({}, require('./docs/source'), require('./docs/tutorials'));
-const files = Object.keys(filemap);
-
-const wrapMarkdown = md => `
-extends ../layout
-
-append style
-  link(rel="stylesheet", href="/docs/css/inlinecpc.css")
-  script(type="text/javascript" src="/docs/js/native.js")
-  style.
-    p { line-height: 1.5em }
-
-block content
-  :markdown
-${md.split('\n').map(line => '    ' + line).join('\n')}
-`;
-
-const cpc = `
-<script>
-  _native.init("CK7DT53U",{
-    targetClass: 'native-inline'
+function getUnstable(ver) {
+  ver = ver.replace("-pre");
+  var spl = ver.split('.');
+  spl = spl.map(function(i) {
+    return parseInt(i);
   });
-</script>
-
-<div class="native-inline">
-  <a href="#native_link#"><span class="sponsor">Sponsor</span> #native_company# — #native_desc#</a>
-</div>
-`;
-
-function pugify(filename, options, newfile) {
-  options = options || {};
-  options.package = pkg;
-  options.linktype = linktype;
-  options.href = href;
-  options.klass = klass;
-
-  let contents = fs.readFileSync(filename).toString();
-
-  if (options.acquit) {
-    contents = transform(contents, tests);
-  }
-  if (options.markdown) {
-    const lines = contents.split('\n');
-    lines.splice(2, 0, cpc);
-    contents = lines.join('\n');
-    contents = wrapMarkdown(contents);
-    newfile = filename.replace('.md', '.html');
-  }
-
-  options.marked = markdown;
-  options.markedCode = function(v) {
-    return markdown('```javascript\n' + v + '\n```');
-  };
-  options.filename = filename;
-  options.filters = {
-    markdown: function(block) {
-      return markdown(block);
-    }
-  };
-
-  pug.render(contents, options, function(err, str) {
-    if (err) {
-      console.error(err.stack);
-      return;
-    }
-
-    newfile = newfile || filename.replace('.pug', '.html');
-
-    fs.writeFile(newfile, str, function(err) {
-      if (err) {
-        console.error('could not write', err.stack);
-      } else {
-        console.log('%s : rendered ', new Date, newfile);
-      }
-    });
-  });
+  spl[1]++;
+  spl[2] = "x";
+  return spl.join('.');
 }
-
-files.forEach(function(file) {
-  const filename = __dirname + '/' + file;
-  pugify(filename, filemap[file]);
-
-  if (process.argv[2] === '--watch') {
-    fs.watchFile(filename, { interval: 1000 }, function(cur, prev) {
-      if (cur.mtime > prev.mtime) {
-        pugify(filename, filemap[file]);
-      }
-    });
-  }
-});
-
-const _acquit = require('./docs/source/acquit');
-const acquitFiles = Object.keys(_acquit);
-acquitFiles.forEach(function(file) {
-  const filename = __dirname + '/docs/acquit.pug';
-  pugify(filename, _acquit[file], __dirname + '/docs/' + file);
-});

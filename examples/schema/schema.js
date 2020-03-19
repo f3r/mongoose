@@ -1,11 +1,10 @@
+
 /**
  * Module dependencies.
  */
 
-'use strict';
-
-const mongoose = require('../../lib');
-const Schema = mongoose.Schema;
+var mongoose = require('../../lib'),
+    Schema = mongoose.Schema;
 
 /**
  * Schema definition
@@ -13,7 +12,7 @@ const Schema = mongoose.Schema;
 
 // recursive embedded-document schema
 
-const Comment = new Schema();
+var Comment = new Schema();
 
 Comment.add({
   title: {
@@ -25,7 +24,7 @@ Comment.add({
   comments: [Comment]
 });
 
-const BlogPost = new Schema({
+var BlogPost = new Schema({
   title: {
     type: String,
     index: true
@@ -41,10 +40,10 @@ const BlogPost = new Schema({
   creator: Schema.ObjectId
 });
 
-const Person = new Schema({
+var Person = new Schema({
   name: {
     first: String,
-    last: String
+    last : String
   },
   email: {
     type: String,
@@ -62,12 +61,12 @@ const Person = new Schema({
  */
 
 BlogPost.path('date')
-  .default(function() {
-    return new Date();
-  })
-  .set(function(v) {
-    return v === 'now' ? new Date() : v;
-  });
+.default(function() {
+  return new Date();
+})
+.set(function(v) {
+  return v == 'now' ? new Date() : v;
+});
 
 /**
  * Pre hook.
@@ -101,7 +100,7 @@ BlogPost.methods.expressiveQuery = function(creator, date, callback) {
 
 function slugGenerator(options) {
   options = options || {};
-  const key = options.key || 'title';
+  var key = options.key || 'title';
 
   return function slugGenerator(schema) {
     schema.path(key).set(function(v) {

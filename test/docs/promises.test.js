@@ -1,46 +1,44 @@
-'use strict';
 var PromiseProvider = require('../../lib/promise_provider');
 var assert = require('assert');
 var mongoose = require('../../');
 
-describe('promises docs', function () {
+describe('promises docs', function() {
   var Band;
-  var db;
+  var db = mongoose.createConnection('mongodb://localhost:27017/mongoose_test');
 
-  before(function (done) {
-    db = mongoose.createConnection('mongodb://localhost:27017/mongoose_test');
-
-    Band = db.model('band-promises', {name: String, members: [String]});
+  before(function(done) {
+    Band = db.model('band-promises', { name: String, members: [String] });
 
     done();
   });
 
-  beforeEach(function (done) {
-    Band.deleteMany({}, done);
+  beforeEach(function(done) {
+    Band.remove({}, done);
   });
 
-  after(function (done) {
-    db.close(done);
+  after(function() {
+    PromiseProvider.reset();
   });
 
   /**
-   * Mongoose async operations, like `.save()` and queries, return thenables.
+   * Mongoose async operations, like `.save()` and queries, return
+   * [Promises/A+ conformant promises](https://promisesaplus.com/).
    * This means that you can do things like `MyModel.findOne({}).then()` and
-   * `await MyModel.findOne({}).exec()` if you're using
-   * [async/await](http://thecodebarbarian.com/80-20-guide-to-async-await-in-node.js.html).
-   * 
-   * You can find the return type of specific operations [in the api docs](https://mongoosejs.com/docs/api.html)
+   * `yield MyModel.findOne({}).exec()` (if you're using [co](https://www.npmjs.com/package/co)).
+   *
+   * For backwards compatibility, Mongoose 4 returns [mpromise](https://www.npmjs.com/package/mpromise)
+   * promises by default.
    */
-  it('Built-in Promises', function (done) {
+  it('Built-in Promises', function(done) {
     var gnr = new Band({
       name: "Guns N' Roses",
       members: ['Axl', 'Slash']
     });
 
     var promise = gnr.save();
-    assert.ok(promise instanceof Promise);
+    assert.ok(promise instanceof require('mpromise'));
 
-    promise.then(function (doc) {
+    promise.then(function(doc) {
       assert.equal(doc.name, "Guns N' Roses");
       // acquit:ignore:start
       done();
@@ -49,21 +47,20 @@ describe('promises docs', function () {
   });
 
   /**
-   * [Mongoose queries](http://mongoosejs.com/docs/queries.html) are **not** promises. They have a `.then()`
-   * function for [co](https://www.npmjs.com/package/co) and async/await as
-   * a convenience. If you need
+   * Mongoose queries are **not** promises. However, they do have a `.then()`
+   * function for `yield` and async/await. If you need
    * a fully-fledged promise, use the `.exec()` function.
    */
-  it('Queries are not promises', function (done) {
-    var query = Band.findOne({name: "Guns N' Roses"});
-    assert.ok(!(query instanceof Promise));
+  it('Queries are not promises', function(done) {
+    var query = Band.findOne({ name: "Guns N' Roses" });
+    assert.ok(!(query instanceof require('mpromise')));
 
     // acquit:ignore:start
     var outstanding = 2;
     // acquit:ignore:end
 
     // A query is not a fully-fledged promise, but it does have a `.then()`.
-    query.then(function (doc) {
+    query.then(function(doc) {
       // use doc
       // acquit:ignore:start
       assert.ok(!doc);
@@ -73,9 +70,9 @@ describe('promises docs', function () {
 
     // `.exec()` gives you a fully-fledged promise
     var promise = query.exec();
-    assert.ok(promise instanceof Promise);
+    assert.ok(promise instanceof require('mpromise'));
 
-    promise.then(function (doc) {
+    promise.then(function(doc) {
       // use doc
       // acquit:ignore:start
       assert.ok(!doc);
@@ -85,33 +82,33 @@ describe('promises docs', function () {
   });
 
   /**
-   * Although queries are not promises, queries are [thenables](https://promisesaplus.com/#terminology).
-   * That means they have a `.then()` function, so you can use queries as promises with either
-   * promise chaining or [async await](https://asyncawait.net)
-   */
-  it('Queries are thenable', function (done) {
-    Band.findOne({name: "Guns N' Roses"}).then(function(doc) {
-      // use doc
-      // acquit:ignore:start
-      assert.ok(!doc);
-      done();
-      // acquit:ignore:end
-    });
-  });
-  
-  /**
-   * If you're an advanced user, you may want to plug in your own promise
-   * library like [bluebird](https://www.npmjs.com/package/bluebird). Just set
-   * `mongoose.Promise` to your favorite
+   * *New in Mongoose 4.1.0*
+   *
+   * While mpromise is sufficient for basic use cases, advanced users
+   * may want to plug in their favorite
+   * [ES6-style promises library](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)
+   * like [bluebird](https://www.npmjs.com/package/bluebird), or just use
+   * native ES6 promises. Just set `mongoose.Promise` to your favorite
    * ES6-style promise constructor and mongoose will use it.
+   *
+   * Mongoose tests with ES6 native promises,
+   * [bluebird](https://www.npmjs.com/package/bluebird), and
+   * [q](https://www.npmjs.com/package/q). Any promise library that exports
+   * an ES6-style promise constructor should work in theory, but theory
+   * often differs from practice. If you find a bug, open
+   * [an issue on GitHub](https://github.com/Automattic/mongoose/issues)
    */
-  it('Plugging in your own Promises Library', function (done) {
+  it('Plugging in your own Promises Library', function(done) {
     // acquit:ignore:start
     if (!global.Promise) {
       return done();
     }
     // acquit:ignore:end
-    var query = Band.findOne({name: "Guns N' Roses"});
+    var query = Band.findOne({ name: "Guns N' Roses" });
+
+    // Use native promises
+    mongoose.Promise = global.Promise;
+    assert.equal(query.exec().constructor, global.Promise);
 
     // Use bluebird
     mongoose.Promise = require('bluebird');

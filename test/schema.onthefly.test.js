@@ -1,78 +1,73 @@
-'use strict';
+var start = require('./common')
+  , assert = require('assert')
+  , mongoose = start.mongoose
+  , random = require('../lib/utils').random
+  , Schema = mongoose.Schema
+  , ObjectId = Schema.ObjectId;
 
-const start = require('./common');
+/**
+ * Setup.
+ */
 
-const assert = require('assert');
-const random = require('../lib/utils').random;
+var DecoratedSchema = new Schema({
+  title     : String
+}, { strict: false });
 
-const mongoose = start.mongoose;
-const Schema = mongoose.Schema;
-const ObjectId = Schema.ObjectId;
+mongoose.model('Decorated', DecoratedSchema);
+
+var collection = 'decorated_' + random();
 
 describe('schema.onthefly', function() {
-  let DecoratedSchema;
-  let collection;
-  let db;
-
-  before(function() {
-    DecoratedSchema = new Schema({
-      title: String
-    }, { strict: false });
-
-    mongoose.model('Decorated', DecoratedSchema);
-    db = start();
-
-    collection = 'decorated_' + random();
-  });
-
-  after(function(done) {
-    db.close(done);
-  });
-
   it('setting should cache the schema type and cast values appropriately', function(done) {
-    const Decorated = db.model('Decorated', collection);
+    var db = start()
+      , Decorated = db.model('Decorated', collection);
 
-    const post = new Decorated();
+    db.close();
+    var post = new Decorated();
     post.set('adhoc', '9', Number);
-    assert.equal(post.get('adhoc').valueOf(), 9);
+    assert.equal(9, post.get('adhoc').valueOf());
     done();
   });
 
   it('should be local to the particular document', function(done) {
-    const Decorated = db.model('Decorated', collection);
+    var db = start()
+      , Decorated = db.model('Decorated', collection);
 
-    const postOne = new Decorated();
+    db.close();
+    var postOne = new Decorated();
     postOne.set('adhoc', '9', Number);
-    assert.notStrictEqual(postOne.$__path('adhoc'), undefined);
+    assert.notStrictEqual(postOne.$__path('adhoc'),undefined);
 
-    const postTwo = new Decorated();
-    assert.notStrictEqual(postTwo.$__path('title'), undefined);
+    var postTwo = new Decorated();
+    assert.notStrictEqual(postTwo.$__path('title'),undefined);
     assert.strictEqual(undefined, postTwo.$__path('adhoc'));
     done();
   });
 
   it('querying a document that had an on the fly schema should work', function(done) {
-    const Decorated = db.model('Decorated', collection);
+    var db = start()
+      , Decorated = db.model('Decorated', collection);
 
-    const post = new Decorated({ title: 'AD HOC' });
+    var post = new Decorated({title: 'AD HOC'});
     // Interpret adhoc as a Number
     post.set('adhoc', '9', Number);
-    assert.equal(post.get('adhoc').valueOf(), 9);
+    assert.equal(9, post.get('adhoc').valueOf());
     post.save(function(err) {
       assert.ifError(err);
       assert.strictEqual(null, err);
       Decorated.findById(post.id, function(err, found) {
+        db.close();
         assert.strictEqual(null, err);
-        assert.equal(found.get('adhoc'), 9);
+        assert.equal(9, found.get('adhoc'));
         // Interpret adhoc as a String instead of a Number now
-        assert.equal(found.get('adhoc', String), '9');
-        assert.equal(found.get('adhoc'), '9');
+        assert.equal('9', found.get('adhoc', String));
+        assert.equal('9', found.get('adhoc'));
 
         // set adhoc as an Object
         found.set('adhoc', '3', Object);
-        assert.equal(typeof found.get('adhoc'), 'string');
+        assert.equal('string', typeof found.get('adhoc'));
         found.set('adhoc', 3, Object);
-        assert.equal(typeof found.get('adhoc'), 'number');
+        assert.equal('number', typeof found.get('adhoc'));
 
         found.set('adhoc', ['hello'], Object);
         assert.ok(Array.isArray(found.get('adhoc')));
@@ -80,61 +75,65 @@ describe('schema.onthefly', function() {
         assert.ok(Array.isArray(found.get('adhoc')));
 
         found.set('adhoc', 3, String);
-        assert.equal(typeof found.get('adhoc'), 'string');
+        assert.equal('string', typeof found.get('adhoc'));
         found.set('adhoc', 3, Object);
-        assert.equal(typeof found.get('adhoc'), 'number');
+        assert.equal('number', typeof found.get('adhoc'));
         done();
       });
     });
   });
 
   it('on the fly Embedded Array schemas should cast properly', function(done) {
-    const Decorated = db.model('Decorated', collection);
+    var db = start()
+      , Decorated = db.model('Decorated', collection);
 
-    const post = new Decorated();
-    post.set('moderators', [{ name: 'alex trebek' }], [new Schema({ name: String })]);
-    assert.equal(post.get('moderators')[0].name, 'alex trebek');
+    db.close();
+    var post = new Decorated();
+    post.set('moderators', [{name: 'alex trebek'}], [new Schema({name: String})]);
+    assert.equal(post.get('moderators')[0].name,'alex trebek');
     done();
   });
 
   it('on the fly Embedded Array schemas should get from a fresh queried document properly', function(done) {
-    const Decorated = db.model('Decorated', collection);
+    var db = start()
+      , Decorated = db.model('Decorated', collection);
 
-    const post = new Decorated();
-    const ModeratorSchema = new Schema({ name: String, ranking: Number });
-
-    post.set('moderators', [{ name: 'alex trebek', ranking: '1' }], [ModeratorSchema]);
-    assert.equal(post.get('moderators')[0].name, 'alex trebek');
+    var post = new Decorated()
+      , ModeratorSchema = new Schema({name: String, ranking: Number});
+    post.set('moderators', [{name: 'alex trebek', ranking: '1'}], [ModeratorSchema]);
+    assert.equal(post.get('moderators')[0].name,'alex trebek');
     post.save(function(err) {
       assert.ifError(err);
       Decorated.findById(post.id, function(err, found) {
+        db.close();
         assert.ifError(err);
-        const rankingPreCast = found.get('moderators')[0].ranking;
-        assert.equal(rankingPreCast, 1);
+        var rankingPreCast = found.get('moderators')[0].ranking;
+        assert.equal(1, rankingPreCast);
         assert.strictEqual(undefined, rankingPreCast.increment);
-        let rankingPostCast = found.get('moderators', [ModeratorSchema])[0].ranking;
-        assert.equal(rankingPostCast, 1);
+        var rankingPostCast = found.get('moderators', [ModeratorSchema])[0].ranking;
+        assert.equal(1, rankingPostCast);
 
-        const NewModeratorSchema = new Schema({ name: String, ranking: String });
+        var NewModeratorSchema = new Schema({ name: String, ranking: String});
         rankingPostCast = found.get('moderators', [NewModeratorSchema])[0].ranking;
-        assert.equal(rankingPostCast, 1);
+        assert.equal(1, rankingPostCast);
         done();
       });
     });
   });
 
   it('casts on get() (gh-2360)', function(done) {
-    const Decorated = db.model('gh2360', DecoratedSchema, 'gh2360');
+    var db = start();
+    var Decorated = db.model('gh2360', DecoratedSchema, 'gh2360');
 
-    const d = new Decorated({ title: '1' });
-    assert.equal(typeof d.get('title', Number), 'number');
+    var d = new Decorated({ title: '1' });
+    assert.equal('number', typeof d.get('title', 'Number'));
 
     d.title = '000000000000000000000001';
     assert.equal(d.get('title', ObjectId).constructor.name, 'ObjectID');
 
     d.set('title', 1, Number);
-    assert.equal(typeof d.get('title'), 'number');
+    assert.equal('number', typeof d.get('title'));
 
-    done();
+    db.close(done);
   });
 });

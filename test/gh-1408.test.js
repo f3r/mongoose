@@ -3,39 +3,33 @@
  * Test dependencies.
  */
 
-'use strict';
-
-const start = require('./common');
-
-const assert = require('assert');
-
-const mongoose = start.mongoose;
-const Schema = mongoose.Schema;
+var start = require('./common')
+  , assert = require('assert')
+  , mongoose = start.mongoose
+  , Schema = mongoose.Schema;
 
 describe('documents should not be converted to _id (gh-1408)', function() {
   it('if an embedded doc', function(done) {
-    this.timeout(process.env.TRAVIS ? 8000 : 4500);
+    var db = start();
 
-    const db = start();
-
-    const PreferenceSchema = new Schema({
-      _id: { type: Schema.ObjectId, auto: true },
+    var PreferenceSchema = new Schema({
+      _id: {type: Schema.ObjectId, auto: true},
       preference: { type: String, required: true },
       value: { type: Schema.Types.Mixed }
     }, { versionKey: false });
 
-    const BrandSchema = new Schema({
+    var BrandSchema = new Schema({
       settings: {
         preferences: [PreferenceSchema]
       }
     });
 
-    const A = db.model('Test', BrandSchema);
+    var A = db.model('gh-1408', BrandSchema);
 
-    const a = new A({
+    var a = new A({
       settings: {
         preferences:
-         [{ preference: 'group_colors', value: false },
+         [ { preference: 'group_colors', value: false },
            { preference: 'can_force_orders', value: true },
            { preference: 'hide_from_buyers', value: true },
            { preference: 'no_orders', value: '' }
@@ -49,21 +43,22 @@ describe('documents should not be converted to _id (gh-1408)', function() {
       A.findById(a, function(err, doc) {
         if (err) return done(err);
 
-        const newData = {
+        var newData = {
           settings: {
             preferences:
-             [{ preference: 'group_colors', value: true },
+             [ { preference: 'group_colors', value: true },
                { preference: 'can_force_orders', value: true },
                { preference: 'custom_csv', value: '' },
                { preference: 'hide_from_buyers', value: false },
                { preference: 'nozoom', value: false },
                { preference: 'no_orders', value: false }
-             ]
+            ]
           }
         };
 
         doc.set('settings', newData.settings, { merge: true });
         doc.markModified('settings'); // <== this caused the bug
+
         doc.save(function(err) {
           if (err) return done(err);
 

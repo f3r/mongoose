@@ -2,95 +2,82 @@
  * Test dependencies.
  */
 
-'use strict';
+var start = require('./common')
+  , assert = require('assert')
+  , mongoose = start.mongoose
+  , random = require('../lib/utils').random
+  , Schema = mongoose.Schema
+  , ObjectId = Schema.Types.ObjectId
+  , DocumentObjectId = mongoose.Types.ObjectId;
 
-const start = require('./common');
+/**
+ * Setup.
+ */
 
-const assert = require('assert');
-const co = require('co');
+var Comments = new Schema;
 
-const mongoose = start.mongoose;
-const Schema = mongoose.Schema;
-const ObjectId = Schema.Types.ObjectId;
-const DocumentObjectId = mongoose.Types.ObjectId;
+Comments.add({
+  title     : String
+  , date      : Date
+  , body      : String
+  , comments  : [Comments]
+});
+
+var BlogPostB = new Schema({
+  title     : String
+  , author    : String
+  , slug      : String
+  , date      : Date
+  , meta      : {
+    date      : Date
+      , visitors  : Number
+  }
+  , published : Boolean
+  , mixed     : {}
+  , numbers   : [Number]
+  , tags      : [String]
+  , sigs      : [Buffer]
+  , owners    : [ObjectId]
+  , comments  : [Comments]
+  , def       : { type: String, default: 'kandinsky' }
+});
+
+var modelName = 'model.select.blogpost';
+mongoose.model(modelName, BlogPostB);
+var collection = 'blogposts_' + random();
 
 describe('model field selection', function() {
-  let Comments;
-  let BlogPostB;
-  let db;
-
-  before(function() {
-    db = start();
-  });
-
-  after(function(done) {
-    db.close(done);
-  });
-
-  beforeEach(() => db.deleteModel(/.*/));
-  afterEach(() => require('./util').clearTestData(db));
-
-  beforeEach(function() {
-    Comments = new Schema;
-
-    Comments.add({
-      title: String,
-      date: Date,
-      body: String,
-      comments: [Comments]
-    });
-
-    const BlogPostSchema = new Schema({
-      title: String,
-      author: String,
-      slug: String,
-      date: Date,
-      meta: {
-        date: Date,
-        visitors: Number
-      },
-      published: Boolean,
-      mixed: {},
-      numbers: [Number],
-      tags: [String],
-      sigs: [Buffer],
-      owners: [ObjectId],
-      comments: [Comments],
-      def: { type: String, default: 'kandinsky' }
-    });
-
-
-    BlogPostB = db.model('BlogPost', BlogPostSchema);
-  });
-
   it('excluded fields should be undefined', function(done) {
-    const date = new Date;
+    var db = start()
+      , BlogPostB = db.model(modelName, collection)
+      , date = new Date;
 
-    const doc = {
-      title: 'subset 1',
-      author: 'me',
-      comments: [{ title: 'first comment', date: new Date }, { title: '2nd', date: new Date }],
-      meta: { date: date }
+    var doc = {
+      title: 'subset 1'
+      , author: 'me'
+      , comments: [{ title: 'first comment', date: new Date }, { title: '2nd', date: new Date }]
+      , meta: { date: date }
     };
 
     BlogPostB.create(doc, function(err, created) {
       assert.ifError(err);
 
-      const id = created.id;
-      BlogPostB.findById(id, { title: 0, 'meta.date': 0, owners: 0, 'comments.user': 0 }, function(err, found) {
+      var id = created.id;
+      BlogPostB.findById(id, {title: 0, 'meta.date': 0, owners: 0, 'comments.user': 0}, function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.equal(found._id.toString(), created._id);
         assert.strictEqual(undefined, found.title);
         assert.strictEqual('kandinsky', found.def);
         assert.strictEqual('me', found.author);
         assert.strictEqual(true, Array.isArray(found.numbers));
-        assert.equal(found.meta.date, undefined);
+        assert.equal(undefined, found.meta.date);
         assert.equal(found.numbers.length, 0);
-        assert.equal(found.owners, undefined);
+        assert.equal(undefined, found.owners);
         assert.strictEqual(true, Array.isArray(found.comments));
         assert.equal(found.comments.length, 2);
         found.comments.forEach(function(comment) {
-          assert.equal(comment.user, undefined);
+          assert.equal(undefined, comment.user);
         });
         done();
       });
@@ -98,13 +85,16 @@ describe('model field selection', function() {
   });
 
   it('excluded fields should be undefined and defaults applied to other fields', function(done) {
-    const id = new DocumentObjectId;
-    const date = new Date;
+    var db = start()
+      , BlogPostB = db.model(modelName, collection)
+      , id = new DocumentObjectId
+      , date = new Date;
 
-    BlogPostB.collection.insertOne({ _id: id, title: 'hahaha1', meta: { date: date } }, function(err) {
+    BlogPostB.collection.insert({ _id: id, title: 'hahaha1', meta: { date: date }}, function(err) {
       assert.ifError(err);
 
-      BlogPostB.findById(id, { title: 0 }, function(err, found) {
+      BlogPostB.findById(id, {title: 0}, function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.equal(found._id.toString(), id);
         assert.strictEqual(undefined, found.title);
@@ -119,24 +109,30 @@ describe('model field selection', function() {
   });
 
   it('where subset of fields excludes _id', function(done) {
-    BlogPostB.create({ title: 'subset 1' }, function(err) {
+    var db = start()
+      , BlogPostB = db.model(modelName, collection);
+    BlogPostB.create({title: 'subset 1'}, function(err) {
       assert.ifError(err);
-      BlogPostB.findOne({ title: 'subset 1' }, { title: 1, _id: 0 }, function(err, found) {
+      BlogPostB.findOne({title: 'subset 1'}, {title: 1, _id: 0}, function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.strictEqual(undefined, found._id);
-        assert.equal(found.title, 'subset 1');
+        assert.equal(found.title,'subset 1');
         done();
       });
     });
   });
 
   it('works with subset of fields, excluding _id', function(done) {
-    BlogPostB.create({ title: 'subset 1', author: 'me' }, function(err) {
+    var db = start()
+      , BlogPostB = db.model(modelName, collection);
+    BlogPostB.create({title: 'subset 1', author: 'me'}, function(err) {
       assert.ifError(err);
-      BlogPostB.find({ title: 'subset 1' }, { title: 1, _id: 0 }, function(err, found) {
+      BlogPostB.find({title: 'subset 1'}, {title: 1, _id: 0}, function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.strictEqual(undefined, found[0]._id);
-        assert.equal(found[0].title, 'subset 1');
+        assert.equal(found[0].title,'subset 1');
         assert.strictEqual(undefined, found[0].def);
         assert.strictEqual(undefined, found[0].author);
         assert.strictEqual(false, Array.isArray(found[0].comments));
@@ -146,9 +142,11 @@ describe('model field selection', function() {
   });
 
   it('works with just _id and findOneAndUpdate (gh-3407)', function(done) {
-    const MyModel = db.model('Test', { test: { type: Number, default: 1 } });
+    var db = start();
 
-    MyModel.collection.insertOne({}, function(error) {
+    var MyModel = db.model('gh3407', { test: { type: Number, default: 1 } });
+
+    MyModel.collection.insert({}, function(error) {
       assert.ifError(error);
       MyModel.findOne({}, { _id: 1 }, function(error, doc) {
         assert.ifError(error);
@@ -159,60 +157,71 @@ describe('model field selection', function() {
   });
 
   it('works with subset of fields excluding emebedded doc _id (gh-541)', function(done) {
-    BlogPostB.create({ title: 'LOTR', comments: [{ title: ':)' }] }, function(err, created) {
+    var db = start()
+      , BlogPostB = db.model(modelName, collection);
+
+    BlogPostB.create({title: 'LOTR', comments: [{ title: ':)' }]}, function(err, created) {
       assert.ifError(err);
-      BlogPostB.find({ _id: created }, { _id: 0, 'comments._id': 0 }, function(err, found) {
+      BlogPostB.find({_id: created}, { _id: 0, 'comments._id': 0 }, function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.strictEqual(undefined, found[0]._id);
-        assert.equal(found[0].title, 'LOTR');
+        assert.equal(found[0].title,'LOTR');
         assert.strictEqual('kandinsky', found[0].def);
         assert.strictEqual(undefined, found[0].author);
         assert.strictEqual(true, Array.isArray(found[0].comments));
-        assert.equal(found[0].comments.length, 1);
+        assert.equal(found[0].comments.length,1);
         assert.equal(found[0].comments[0].title, ':)');
         assert.strictEqual(undefined, found[0].comments[0]._id);
         // gh-590
-        assert.ok(!found[0].comments[0].id);
+        assert.strictEqual(null, found[0].comments[0].id);
         done();
       });
     });
   });
 
   it('included fields should have defaults applied when no value exists in db (gh-870)', function(done) {
-    const id = new DocumentObjectId;
+    var db = start()
+      , BlogPostB = db.model(modelName, collection)
+      , id = new DocumentObjectId;
 
-    BlogPostB.collection.insertOne(
-      { _id: id, title: 'issue 870' }, { safe: true }, function(err) {
-        assert.ifError(err);
-
-        BlogPostB.findById(id, 'def comments', function(err, found) {
+    BlogPostB.collection.insert(
+        { _id: id, title: 'issue 870'}, { safe: true }, function(err) {
           assert.ifError(err);
-          assert.ok(found);
-          assert.equal(found._id.toString(), id);
-          assert.strictEqual(undefined, found.title);
-          assert.strictEqual('kandinsky', found.def);
-          assert.strictEqual(undefined, found.author);
-          assert.strictEqual(true, Array.isArray(found.comments));
-          assert.equal(found.comments.length, 0);
-          done();
+
+          BlogPostB.findById(id, 'def comments', function(err, found) {
+            db.close();
+            assert.ifError(err);
+            assert.ok(found);
+            assert.equal(found._id.toString(), id);
+            assert.strictEqual(undefined, found.title);
+            assert.strictEqual('kandinsky', found.def);
+            assert.strictEqual(undefined, found.author);
+            assert.strictEqual(true, Array.isArray(found.comments));
+            assert.equal(0, found.comments.length);
+            done();
+          });
         });
-      });
   });
 
   it('including subdoc field excludes other subdoc fields (gh-1027)', function(done) {
-    BlogPostB.create({ comments: [{ title: 'a' }, { title: 'b' }] }, function(err, doc) {
+    var db = start()
+      , BlogPostB = db.model(modelName, collection);
+
+    BlogPostB.create({ comments: [{title: 'a'}, {title:'b'}] }, function(err, doc) {
       assert.ifError(err);
 
       BlogPostB.findById(doc._id).select('_id comments.title').exec(function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.ok(found);
-        assert.equal(doc._id.toString(), found._id.toString());
+        assert.equal(found._id.toString(), doc._id.toString());
         assert.strictEqual(undefined, found.title);
         assert.strictEqual(true, Array.isArray(found.comments));
         found.comments.forEach(function(comment) {
-          assert.equal(comment.body, undefined);
-          assert.equal(comment.comments, undefined);
-          assert.equal(comment._id, undefined);
+          assert.equal(undefined, comment.body);
+          assert.equal(undefined, comment.comments);
+          assert.equal(undefined, comment._id);
           assert.ok(!!comment.title);
         });
         done();
@@ -221,25 +230,29 @@ describe('model field selection', function() {
   });
 
   it('excluding nested subdoc fields (gh-1027)', function(done) {
-    BlogPostB.create({ title: 'top', comments: [{ title: 'a', body: 'body' }, { title: 'b', body: 'body', comments: [{ title: 'c' }] }] }, function(err, doc) {
+    var db = start()
+      , BlogPostB = db.model(modelName, collection);
+
+    BlogPostB.create({ title: 'top', comments: [{title: 'a',body:'body'}, {title:'b', body:'body',comments: [{title:'c'}]}] }, function(err, doc) {
       assert.ifError(err);
 
       BlogPostB.findById(doc._id).select('-_id -comments.title -comments.comments.comments -numbers').exec(function(err, found) {
+        db.close();
         assert.ifError(err);
         assert.ok(found);
-        assert.equal(found._id, undefined);
-        assert.strictEqual(found.title, 'top');
-        assert.equal(found.numbers, undefined);
+        assert.equal(undefined, found._id);
+        assert.strictEqual('top', found.title);
+        assert.equal(undefined, found.numbers);
         assert.strictEqual(true, Array.isArray(found.comments));
         found.comments.forEach(function(comment) {
-          assert.equal(comment.title, undefined);
-          assert.equal(comment.body, 'body');
-          assert.strictEqual(Array.isArray(comment.comments), true);
+          assert.equal(undefined, comment.title);
+          assert.equal('body', comment.body);
+          assert.strictEqual(true, Array.isArray(comment.comments));
           assert.ok(comment._id);
           comment.comments.forEach(function(comment) {
-            assert.equal(comment.title, 'c');
-            assert.equal(comment.body, undefined);
-            assert.equal(comment.comments, undefined);
+            assert.equal('c', comment.title);
+            assert.equal(undefined, comment.body);
+            assert.equal(undefined, comment.comments);
             assert.ok(comment._id);
           });
         });
@@ -252,95 +265,89 @@ describe('model field selection', function() {
     // mongodb 2.2 support
 
     it('casts elemMatch args (gh-1091)', function(done) {
-      const postSchema = new Schema({
-        ids: [{ type: Schema.ObjectId }]
+      var db = start();
+
+      var postSchema = new Schema({
+        ids: [{type: Schema.ObjectId}]
       });
 
-      const B = db.model('Test', postSchema);
-      const _id1 = new mongoose.Types.ObjectId;
-      const _id2 = new mongoose.Types.ObjectId;
+      var B = db.model('gh-1091', postSchema);
+      var _id1 = new mongoose.Types.ObjectId;
+      var _id2 = new mongoose.Types.ObjectId;
 
       B.create({ ids: [_id1, _id2] }, function(err, doc) {
         assert.ifError(err);
 
         B
-          .findById(doc._id)
-          .select({ ids: { $elemMatch: { $in: [_id2.toString()] } } })
+        .findById(doc._id)
+        .select({ ids: { $elemMatch: { $in: [_id2.toString()] }}})
+        .exec(function(err, found) {
+          assert.ifError(err);
+          assert.ok(found);
+          assert.equal(found.id, doc.id);
+          assert.equal(1, found.ids.length);
+          assert.equal(_id2.toString(), found.ids[0].toString());
+
+          B
+          .find({ _id: doc._id })
+          .select({ ids: { $elemMatch: { $in: [_id2.toString()] }}})
           .exec(function(err, found) {
             assert.ifError(err);
-            assert.ok(found);
+            assert.ok(found.length);
+            found = found[0];
             assert.equal(found.id, doc.id);
-            assert.equal(found.ids.length, 1);
-            assert.equal(found.ids[0].toString(), _id2.toString());
-
-            B
-              .find({ _id: doc._id })
-              .select({ ids: { $elemMatch: { $in: [_id2.toString()] } } })
-              .exec(function(err, found) {
-                assert.ifError(err);
-                assert.ok(found.length);
-                found = found[0];
-                assert.equal(found.id, doc.id);
-                assert.equal(found.ids.length, 1);
-                assert.equal(found.ids[0].toString(), _id2.toString());
-                done();
-              });
+            assert.equal(1, found.ids.length);
+            assert.equal(_id2.toString(), found.ids[0].toString());
+            done();
           });
+        });
       });
     });
 
-    it('saves modified elemMatch paths (gh-1334)', function(done) {
-      const postSchema = new Schema({
-        ids: [{ type: Schema.ObjectId }],
-        ids2: [{ type: Schema.ObjectId }]
+    it('disallows saving modified elemMatch paths (gh-1334)', function(done) {
+      var db = start();
+
+      var postSchema = new Schema({
+        ids:  [{type: Schema.ObjectId}]
+         , ids2: [{type: Schema.ObjectId}]
       });
 
-      const B = db.model('Test', postSchema);
-      const _id1 = new mongoose.Types.ObjectId;
-      const _id2 = new mongoose.Types.ObjectId;
+      var B = db.model('gh-1334', postSchema);
+      var _id1 = new mongoose.Types.ObjectId;
+      var _id2 = new mongoose.Types.ObjectId;
 
       B.create({ ids: [_id1, _id2], ids2: [_id2, _id1] }, function(err, doc) {
         assert.ifError(err);
 
         B
-          .findById(doc._id)
-          .select({ ids2: { $elemMatch: { $in: [_id1.toString()] } } })
-          .exec(function(err, found) {
-            assert.ifError(err);
-            assert.equal(found.ids2.length, 1);
-            found.ids2.set(0, _id2);
-
-            found.save(function(err) {
-              assert.ifError(err);
-
-              B
-                .findById(doc._id)
-                .select({ ids: { $elemMatch: { $in: [_id2.toString()] } } })
-                .select('ids2')
-                .exec(function(err, found) {
-                  assert.equal(2, found.ids2.length);
-                  assert.equal(_id2.toHexString(), found.ids2[0].toHexString());
-                  assert.equal(_id2.toHexString(), found.ids2[1].toHexString());
-
-                  found.ids.pull(_id2);
-
-                  found.save(function(err) {
-                    assert.ok(err);
-
-                    done();
-                  });
-                });
-            });
+        .findById(doc._id)
+        .select({ ids: { $elemMatch:  { $in: [_id2.toString()] }}})
+        .select({ ids2: { $elemMatch: { $in: [_id1.toString()] }}})
+        .exec(function(err, found) {
+          assert.ifError(err);
+          assert.equal(1, found.ids.length);
+          assert.equal(1, found.ids2.length);
+          found.ids = [];
+          found.ids2.set(0, _id2);
+          found.save(function(err) {
+            db.close();
+            assert.ok(/\$elemMatch projection/.test(err));
+            assert.ok(/ ids/.test(err));
+            assert.ok(/ ids2/.test(err));
+            done();
           });
+        });
       });
     });
 
     it('works with $ positional in select (gh-2031)', function(done) {
-      const postSchema = new Schema({
+      var db = start();
+
+      var postSchema = new Schema({
         tags: [{ tag: String, count: 0 }]
       });
 
-      const Post = db.model('Test', postSchema);
+      var Post = db.model('gh-2031', postSchema, 'gh-2031');
       Post.create({ tags: [{ tag: 'bacon', count: 2 }, { tag: 'eggs', count: 3 }] }, function(error) {
         assert.ifError(error);
         Post.findOne({ 'tags.tag': 'eggs' }, { 'tags.$': 1 }, function(error, post) {
@@ -348,7 +355,7 @@ describe('model field selection', function() {
           post.tags[0].count = 1;
           post.save(function(error) {
             assert.ok(error);
-            done();
+            db.close(done);
           });
         });
       });
@@ -356,73 +363,57 @@ describe('model field selection', function() {
   });
 
   it('selecting an array of docs applies defaults properly (gh-1108)', function(done) {
-    const M = BlogPostB;
+    var db = start()
+      , M = db.model(modelName, collection);
 
-    const m = new M({ title: '1108', comments: [{ body: 'yay' }] });
+    var m = new M({ title: '1108', comments: [{body:'yay'}] });
     m.comments[0].comments = undefined;
     m.save(function(err, doc) {
       assert.ifError(err);
       M.findById(doc._id).select('comments').exec(function(err, found) {
         assert.ifError(err);
         assert.ok(Array.isArray(found.comments));
-        assert.equal(found.comments.length, 1);
+        assert.equal(1, found.comments.length);
         assert.ok(Array.isArray(found.comments[0].comments));
-        done();
-      });
-    });
-  });
-
-  it('select properties named length (gh-3903)', function(done) {
-    const schema = new mongoose.Schema({
-      length: Number,
-      name: String
-    });
-
-    const MyModel = db.model('Test', schema);
-
-    MyModel.create({ name: 'val', length: 3 }, function(error) {
-      assert.ifError(error);
-      MyModel.findOne({}).select({ length: 1 }).exec(function(error, doc) {
-        assert.ifError(error);
-        assert.ok(!doc.name);
-        done();
+        db.close(done);
       });
     });
   });
 
   it('appropriately filters subdocuments based on properties (gh-1280)', function(done) {
-    const RouteSchema = new Schema({
-      stations: {
+    var db = start();
+    var RouteSchema = new Schema({
+      stations:   {
         start: {
-          name: { type: String },
-          loc: { type: [Number], index: '2d' }
+          name:   { type: String },
+          loc:    { type: [Number], index: '2d' }
         },
         end: {
-          name: { type: String },
-          loc: { type: [Number], index: '2d' }
+          name:   { type: String },
+          loc:    { type: [Number], index: '2d' }
         },
         points: [
-          {
-            name: { type: String },
-            loc: { type: [Number], index: '2d' }
-          }
+            {
+              name:   { type: String },
+              loc:    { type: [Number], index: '2d' }
+            }
         ]
       }
     });
 
-    const Route = db.model('Test', RouteSchema);
+    var Route = db.model('Route' + random(), RouteSchema);
 
-    const item = {
-      stations: {
-        start: {
-          name: 'thing',
-          loc: [1, 2]
+    var item = {
+      stations : {
+        start : {
+          name : "thing",
+          loc : [1,2]
         },
-        end: {
-          name: 'thingend',
-          loc: [2, 3]
+        end : {
+          name : "thingend",
+          loc : [2,3]
         },
-        points: [{ name: 'rawr' }]
+        points : [ { name : "rawr" }]
       }
     };
 
@@ -431,68 +422,16 @@ describe('model field selection', function() {
 
       Route.findById(i.id).select('-stations').exec(function(err, res) {
         assert.ifError(err);
-        assert.equal(res.stations.toString(), 'MongooseDocument { undefined }');
+        assert.ok(res.stations.toString() === "undefined");
 
         Route.findById(i.id).select('-stations.start -stations.end').exec(function(err, res) {
           assert.ifError(err);
-          assert.equal(res.stations.start.toString(), 'MongooseDocument { undefined }');
-          assert.equal(res.stations.end.toString(), 'MongooseDocument { undefined }');
+          assert.equal(res.stations.start.toString(), "undefined");
+          assert.equal(res.stations.end.toString(), "undefined");
           assert.ok(Array.isArray(res.stations.points));
-          done();
+          db.close(done);
         });
       });
-    });
-  });
-
-  it('sets defaults correctly in child docs with projection (gh-7159)', function() {
-    const CalendarSchema = new Schema({
-      dateFormat: {
-        type: String,
-        default: 'dd/MM/yyyy'
-      },
-      locale: {
-        type: String,
-        default: 'en-gb'
-      }
-    }, { _id: false });
-
-    const SettingsSchema = new Schema({
-      calendar: {
-        type: CalendarSchema,
-        default: {}
-      }
-    }, { _id: false });
-
-    const BlogPostSchema = new Schema({
-      author: String,
-      settings: {
-        type: SettingsSchema,
-        default: {}
-      }
-    });
-
-    db.deleteModel(/BlogPost/);
-    const BlogPost = db.model('BlogPost', BlogPostSchema);
-
-    return co(function*() {
-      yield BlogPost.create({
-        author: 'me',
-        settings: {
-          calendar: {
-            dateFormat: '1234'
-          }
-        }
-      });
-
-      yield BlogPost.updateOne({}, { $unset: { 'settings.calendar.locale': 1 } });
-
-      let doc = yield BlogPost.findOne();
-      assert.strictEqual(doc.settings.calendar.locale, 'en-gb');
-      assert.strictEqual(doc.settings.calendar.dateFormat, '1234');
-
-      doc = yield BlogPost.findOne().select('settings author');
-      assert.strictEqual(doc.settings.calendar.locale, 'en-gb');
-      assert.strictEqual(doc.settings.calendar.dateFormat, '1234');
     });
   });
 });

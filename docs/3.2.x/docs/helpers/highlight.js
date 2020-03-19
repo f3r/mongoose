@@ -1,5 +1,4 @@
 
-'use strict';
 var h = require('highlight.js')
 
 function hl (str) {
